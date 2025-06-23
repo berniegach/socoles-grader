@@ -71,6 +71,7 @@ psql -c "GRANT ALL PRIVILEGES ON DATABASE grader TO $(whoami);"
 cd ../../frontend
 npm install
 npm start
+```
 
 ## 📚 Citation
 
