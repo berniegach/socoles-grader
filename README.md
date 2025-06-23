@@ -87,13 +87,13 @@ If you use SOCOLES in your research, please cite it as follows:
   month        = {Jun},
   note         = {Accessed: YYYY-MM-DD}
 }
+```
 
 ## Publications
 
 Please also cite these publications that describe the grading methodology and evaluation:
 
-
-
+```bibtex
 @InProceedings{benard:2024,
 author={Wanjiru, Benard and Bommel, Patrick van and Hiemstra, Djoerd},
 editor="Daimi, Kevin
@@ -136,5 +136,6 @@ year = {2024}
   biburl       = {https://dblp.org/rec/conf/icse-seeng/WanjiruBH23.bib},
   bibsource    = {dblp computer science bibliography, https://dblp.org}
 }
+```
 
 
