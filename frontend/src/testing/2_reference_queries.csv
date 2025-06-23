@@ -1,0 +1,2 @@
+"SELECT d.name AS department_name, SUM(e.salary) AS total_salary FROM departments d JOIN employees e ON d.id = e.department_id GROUP BY d.name HAVING total_salary > 500000;"
+"SELECT department_id, COUNT(employee_id) AS num_employees, SUM(salary) AS total_salary FROM employees GROUP BY department_id HAVING AVG(salary) > 60000 AND MAX(salary) < 120000;"
