@@ -1,0 +1,4 @@
+/home/ubuntu/socoles-grader/backend/build/CMakeFiles/test_socoles.dir
+/home/ubuntu/socoles-grader/backend/build/CMakeFiles/socoles_server.dir
+/home/ubuntu/socoles-grader/backend/build/CMakeFiles/edit_cache.dir
+/home/ubuntu/socoles-grader/backend/build/CMakeFiles/rebuild_cache.dir
