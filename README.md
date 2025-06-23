@@ -79,7 +79,7 @@ If you use SOCOLES in your research, please cite it as follows:
 
 ```bibtex
 @software{socoles-autograder,
-  author       = {Your Name and Coauthors},
+  author       = {Benard Wanjiru},
   title        = {SOCOLES-Grader: An Automatic SQL Query Grading Tool},
   version      = {v1.0.0},
   url          = {https://github.com/berniegach/socoles-grader},
