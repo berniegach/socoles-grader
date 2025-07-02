@@ -73,6 +73,41 @@ npm install
 npm start
 ```
 
+## 📂 Grading Input Files
+
+Before you start grading, prepare and upload the following files via the frontend. The file names can be anything — what matters is that their **content matches the required structure** below.
+
+---
+
+#### ✅ Reference Queries File
+
+A CSV file containing **one column without a header**. Each row is a correct SQL statement that the auto-grader will use as the “gold standard.”
+
+---
+
+#### ✅ Student Queries File
+
+A CSV file with these **exact columns (including headers)**:
+
+| Column Name     | Description                                                  |
+|----------------|--------------------------------------------------------------|
+| Org Defined ID | The student’s unique ID.                                      |
+| Attempt #      | The student’s attempt number for this question.              |
+| Q #            | The question number.                                          |
+| Answer         | The student’s SQL statement submission.                       |
+| Score          | *(Empty on upload)* Will be populated by the grader.         |
+| Out Of         | Maximum points for a correct answer (default: 1).            |
+| Feedback       | *(Empty on upload)* Will contain comments or suggestions.    |
+
+---
+
+#### ✅ Initialization SQL File
+
+A `.sql` script for initializing or seeding your database schema/data.
+
+For grading only DDL/DML statements (e.g., standalone `CREATE TABLE …`), this file can be left empty.
+
+
 ## 📚 Citation
 
 If you use SOCOLES in your research, please cite it as follows:
