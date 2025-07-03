@@ -1,0 +1,42 @@
+version: '3.8'
+
+services:
+
+  db:
+    image: postgres:14
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: grader
+      POSTGRES_PASSWORD: secretasdfg1678
+      POSTGRES_DB: grader
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U grader" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: on-failure
+    ports:
+      - "5000:5000"
+    volumes:
+      pg_data:
+
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    depends_on:
+      - backend
+    restart: unless-stopped
+    ports:
+      - "3000:80" # host:container (adjust if you use npm start on 3000)

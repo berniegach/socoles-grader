@@ -22,10 +22,10 @@ if(NOT PG_QUERY_LIBRARY)
     message(FATAL_ERROR "libpg_query not found")
 endif()
 
-find_library(DUCKDB_LIBRARY NAMES duckdb PATHS duckdb/ OPTIONAL_DIRS lib)
-if(NOT DUCKDB_LIBRARY)
-    message(FATAL_ERROR "libduckdb not found")
-endif()
+#find_library(DUCKDB_LIBRARY NAMES duckdb PATHS duckdb/ OPTIONAL_DIRS lib)
+#if(NOT DUCKDB_LIBRARY)
+#    message(FATAL_ERROR "libduckdb not found")
+#endif()
 
 # Test executable target
 add_executable(test_socoles  test.cpp utils.cpp tree_edit_distance.cpp grader.cpp sql_keywords.cpp abstract_syntax_tree.cpp model_query.cpp student_query.cpp admin.cpp my_duckdb.cpp process_queries.cpp #uery_generator.cpp
