@@ -7,7 +7,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: grader
-      POSTGRES_PASSWORD: secretasdfg1678
+      POSTGRES_PASSWORD: adgadjhasg^jagsfgc891732
       POSTGRES_DB: grader
     volumes:
       - pg_data:/var/lib/postgresql/data
@@ -27,9 +27,13 @@ services:
     restart: on-failure
     ports:
       - "5000:5000"
-    volumes:
-      pg_data:
-
+    environment:
+      # libpq will pick these up
+      - PGHOST=db
+      - PGPORT=5432
+      - PGDATABASE=grader
+      - PGUSER=grader
+      - PGPASSWORD=adgadjhasg^jagsfgc891732
 
   frontend:
     build:
@@ -39,4 +43,8 @@ services:
       - backend
     restart: unless-stopped
     ports:
-      - "3000:80" # host:container (adjust if you use npm start on 3000)
+      - "3000:3000"
+    environment:
+      - HOST=0.0.0.0
+volumes:
+  pg_data:

@@ -1,36 +1,20 @@
-# 1) Build stage
-FROM debian:bookworm-slim AS builder
-
-# install build-time deps
-RUN apt-get update && \
-    apt-get install -y \
-    build-essential cmake git pkg-config \
-    libpq-dev libpqxx-dev \
-    nlohmann-json3-dev libcrow-dev \
-    libboost-unit-test-framework-dev \
-    libboost-program-options-dev \
-    libboost-system-dev \
-    libboost-thread-dev \
-    libssl-dev zlib1g-dev \
-    libpg-query-dev \
-    && rm -rf /var/lib/apt/lists/*
+# Stage 1: build the React/Node frontend
+FROM node:18-bullseye AS frontend-builder
 
 WORKDIR /app
+
+# 1. Install dependencies
+COPY package.json package-lock.json ./
+RUN npm ci
+
+# 2. Build production assets
 COPY . .
-RUN mkdir build && cd build && cmake -DCMAKE_BUILD_TYPE=Release .. && make
 
-# 2) Runtime stage
-FROM debian:bookworm-slim
+# Allow CRA’s dev server to bind to all interfaces
+ENV HOST=0.0.0.0
 
-# only runtime libs
-RUN apt-get update && \
-    apt-get install -y \
-    libpq5 libpqxx-6.4 \
-    libssl1.1 zlib1g \
-    libpg-query1706.0 \
-    && rm -rf /var/lib/apt/lists/*
+# Expose the port that npm start uses by default
+EXPOSE 3000
 
-# copy the compiled server
-COPY --from=builder /app/build/socoles_server /usr/local/bin/socoles_server
-
-ENTRYPOINT ["socoles_server"]
+# Run the same start command you use locally
+CMD ["npm", "start"]
