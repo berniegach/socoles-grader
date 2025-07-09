@@ -43,8 +43,44 @@ SOCOLES is a C++ powered SQL auto-grader with a JavaScript frontend
   Checks and grades table constraints like `PRIMARY KEY`, `UNIQUE`, `CHECK`, and foreign keys.
 
 
-## 🚀 Quick Start
+## 🐳 Docker Quick Start
 
+This is the easiest way to get SOCOLES up and running, with PostgreSQL, backend, and frontend all in Docker containers. Make sure you have Dcoker installed.
+
+### 1. Clone the repo
+```bash
+git clone https://github.com/berniegach/socoles-grader.git
+cd socoles-grader
+```
+
+### 1. Create your `.env` file
+
+At the project root, create a file named `.env` with the following contents:
+
+```dotenv
+# PostgreSQL superuser and database settings
+POSTGRES_USER=grader
+POSTGRES_PASSWORD= your own password
+POSTGRES_DB=grader
+
+# libpq / backend settings
+PGHOST=db
+PGPORT=5432
+PGDATABASE=grader
+PGUSER=grader
+PGPASSWORD= your own password
+```
+Docker compose will load these variables
+
+### 2. Build and start everything
+```bash
+docker compose build 
+docker compose up -d
+```
+
+
+## 🚀 Manual Quick Start
+If you prefer to build and run outside of Docker, follow these steps:
 
 ```bash
 # 1. Clone the repo

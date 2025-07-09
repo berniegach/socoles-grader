@@ -1,14 +1,10 @@
-version: '3.8'
-
 services:
 
   db:
     image: postgres:14
     restart: unless-stopped
-    environment:
-      POSTGRES_USER: grader
-      POSTGRES_PASSWORD: adgadjhasg^jagsfgc891732
-      POSTGRES_DB: grader
+    env_file:
+      - .env
     volumes:
       - pg_data:/var/lib/postgresql/data
     healthcheck:
@@ -27,13 +23,9 @@ services:
     restart: on-failure
     ports:
       - "5000:5000"
-    environment:
+    env_file:
       # libpq will pick these up
-      - PGHOST=db
-      - PGPORT=5432
-      - PGDATABASE=grader
-      - PGUSER=grader
-      - PGPASSWORD=adgadjhasg^jagsfgc891732
+      - .env
 
   frontend:
     build:

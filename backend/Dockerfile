@@ -34,13 +34,16 @@ RUN git clone --depth 1 https://github.com/duckdb/duckdb.git /tmp/duckdb \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_INSTALL_PREFIX=/usr/local \
     .. \
-    && make -j"$(nproc)" install \
+    # to avoid memory issues, limit parallel jobs to 2
+    && make -j2 install \ 
     && rm -rf /tmp/duckdb                            
 
 
 
 WORKDIR /app
 COPY . .
+# remove any previous build directory to avoid conflicts
+RUN rm -rf build 
 RUN mkdir build && cd build && cmake -DCMAKE_BUILD_TYPE=Release .. && make
 
 # 3) Runtime stage
