@@ -3,8 +3,10 @@ services:
   db:
     image: postgres:14
     restart: unless-stopped
-    env_file:
-      - .env
+    environment:
+      POSTGRES_USER: grader
+      POSTGRES_PASSWORD: adgadjhasg^jagsfgc891732
+      POSTGRES_DB: grader
     volumes:
       - pg_data:/var/lib/postgresql/data
     healthcheck:
@@ -14,6 +16,7 @@ services:
       retries: 5
 
   backend:
+    image: ghcr.io/berniegach/socoles-backend:1.0.0
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -22,12 +25,18 @@ services:
         condition: service_healthy
     restart: on-failure
     ports:
-      - "5000:5000"
-    env_file:
+      # open only for local development
+      - "127.0.0.1:5000:5000"
+    environment:
       # libpq will pick these up
-      - .env
+      - PGHOST=db
+      - PGPORT=5432
+      - PGDATABASE=grader
+      - PGUSER=grader
+      - PGPASSWORD=adgadjhasg^jagsfgc891732
 
   frontend:
+    image: ghcr.io/berniegach/socoles-frontend:1.0.0
     build:
       context: ./frontend
       dockerfile: Dockerfile
@@ -35,8 +44,8 @@ services:
       - backend
     restart: unless-stopped
     ports:
-      - "3000:3000"
-    environment:
-      - HOST=0.0.0.0
+      - "127.0.0.1:3000:3000"
+    #environment:
+    # - HOST=0.0.0.0
 volumes:
   pg_data:

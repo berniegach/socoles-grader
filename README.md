@@ -53,25 +53,6 @@ git clone https://github.com/berniegach/socoles-grader.git
 cd socoles-grader
 ```
 
-### 1. Create your `.env` file
-
-At the project root, create a file named `.env` with the following contents:
-
-```dotenv
-# PostgreSQL superuser and database settings
-POSTGRES_USER=grader
-POSTGRES_PASSWORD= your own password
-POSTGRES_DB=grader
-
-# libpq / backend settings
-PGHOST=db
-PGPORT=5432
-PGDATABASE=grader
-PGUSER=grader
-PGPASSWORD= your own password
-```
-Docker compose will load these variables
-
 ### 2. Build and start everything
 ```bash
 docker compose build 
