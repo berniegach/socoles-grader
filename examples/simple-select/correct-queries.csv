@@ -1,0 +1,1 @@
+SELECT title FROM Album WHERE Album.album_id = 2;

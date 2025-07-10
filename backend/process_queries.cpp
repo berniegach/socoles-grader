@@ -39,6 +39,8 @@ ProcessQueries::ProcessQueries(std::vector<ModelQuery> &model_queries, std::vect
                                const Admin &admin, Grader &grader)
     : query_engine(db_opts) // ← initialize our engine
 {
+    // lets clear the database just in case
+    query_engine.clear();
     query_engine.initialize();
     Goals goals;
     // Initialize the worker threads
