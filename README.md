@@ -59,6 +59,8 @@ docker compose build
 docker compose up -d
 ```
 
+You can now access the webapp at http://localhost:3000
+
 
 ## 🚀 Manual Quick Start
 If you prefer to build and run outside of Docker, follow these steps:
