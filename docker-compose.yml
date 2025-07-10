@@ -26,7 +26,7 @@ services:
     restart: on-failure
     ports:
       # open only for local development
-      - "127.0.0.1:5000:5000"
+      - "5000:5000"
     environment:
       # libpq will pick these up
       - PGHOST=db
@@ -44,7 +44,7 @@ services:
       - backend
     restart: unless-stopped
     ports:
-      - "127.0.0.1:3000:3000"
+      - "3000:3000"
     #environment:
     # - HOST=0.0.0.0
 volumes:
