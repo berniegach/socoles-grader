@@ -21,12 +21,12 @@ function Grade() {
   };
 
   const initialOptionsState = {
-    syntaxSensitivity: '',
-    semanticsSensitivity: '',
-    resultsSensitivity: '',
-    evaluationPriority: '',
-    textEditDistance: '',
-    treeEditDistance: '',
+    syntaxSensitivity: '3 Levels',
+    semanticsSensitivity: '8 Levels',
+    resultsSensitivity: '3 Levels',
+    evaluationPriority: '5 - Semantics, Results, Syntax',
+    textEditDistance: 4,
+    treeEditDistance: 4,
     checkOrder: false,
     autoDB: false,
     numberOfDBs: '',
@@ -334,7 +334,7 @@ function Grade() {
       };
 
       // Send the data to the backend
-      const response = await axios.post('http://localhost:5000/grade-queries', dataPayload, {
+      const response = await axios.post('/grade-queries', dataPayload, {
         headers: {
           'Content-Type': 'application/json',
         },
