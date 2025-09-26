@@ -1,26 +1,54 @@
-# SOCOLES Frontend
 
-This directory contains the JavaScript/React user interface for SOCOLES, which lets an instructor submit SQL queries for grading and view automated grading results.
+## Database (PostgreSQL)
 
----
+The app uses PostgreSQL for persisting questions, assignments, submissions and other data.
 
-## Prerequisites
+### Environment variables
+Create a `.env.local` file in the project root.
 
-- **Node.js** ≥ 14  
-- **npm** ≥ 6 (or **Yarn** ≥ 1.22)  
-- A running SOCOLES backend server (see `../backend/README.md`)
+```
+PGHOST=localhost
+PGPORT=5432
+PGUSER=user
+PGPASSWORD=password
+PGDATABASE=sqlgrader
+```
 
----
+### Creating the PostgreSQL role & database manually
 
-## Getting Started
+In your local Postgres install (e.g. Debian/Ubuntu), create a dedicated role (user) and database before starting the app. Replace `STRONG_PASSWORD` with a long unique password. These information should match your `.env.local` file. 
 
-1. **Enter the frontend directory**  
-   ```bash
-   cd frontend
-2. **Install dependencies**
-   ```bash
-   npm install
+1. Switch to the postgres system user and open psql:
 
-3. **Start the development server**
-   ```bash
-   npm start
+```bash
+sudo -iu postgres
+psql
+```
+
+2. Create role and database:
+
+```sql
+CREATE ROLE user WITH LOGIN PASSWORD 'STRONG_PASSWORD';
+CREATE DATABASE sqlgrader OWNER user;
+```
+
+3. Exit psql and the postgres user:
+
+```sql
+\q
+```
+```bash
+exit
+```
+
+
+4. Install dependencies and start the development server:
+
+```bash
+npm install
+npm run dev
+```
+
+This will install all required packages and launch the app in development mode.
+
+

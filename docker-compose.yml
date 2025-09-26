@@ -4,13 +4,14 @@ services:
     image: postgres:14
     restart: unless-stopped
     environment:
-      POSTGRES_USER: grader
+      POSTGRES_USER: back-user
       POSTGRES_PASSWORD: adgadjhasg^jagsfgc891732
       POSTGRES_DB: grader
     volumes:
       - pg_data:/var/lib/postgresql/data
+      - ./docker/db-init:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U grader" ]
+      test: [ "CMD-SHELL", "pg_isready -U back-user" ]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -32,7 +33,7 @@ services:
       - PGHOST=db
       - PGPORT=5432
       - PGDATABASE=grader
-      - PGUSER=grader
+      - PGUSER=back-user
       - PGPASSWORD=adgadjhasg^jagsfgc891732
 
   frontend:
@@ -45,7 +46,17 @@ services:
     restart: unless-stopped
     ports:
       - "127.0.0.1:3000:3000"
-    #environment:
-    # - HOST=0.0.0.0
+    environment:
+      - NEXT_PUBLIC_SOCOLES_API_URL=http://localhost:5000
+      - NEXT_PUBLIC_SOCOLES_GRADE_PATH=/grade-queries
+      - SOCOLES_INTERNAL_API_URL=http://backend:5000
+      # Postgres connection for server-side Next.js code (pg Pool)
+      - PGHOST=db
+      - PGPORT=5432
+      - PGUSER=front-user
+      - PGPASSWORD=ajsdfgfhjgdfhdg$87676g5
+      - PGDATABASE=manageclass
+      # HOST optional for Next.js listen address; uncomment if needed
+      # - HOST=0.0.0.0
 volumes:
   pg_data:

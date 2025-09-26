@@ -4,13 +4,26 @@ backend/build/
 .vscode/
 .env
 
+# legacy (to be removed)
+frontend-old/
+
 # dependencies
 frontend/node_modules
 frontend/.pnp
 frontend/.pnp.js
+frontend/.pnp.*
+frontend/.yarn/*
+!frontend/.yarn/patches
+!frontend/.yarn/plugins
+!frontend/.yarn/releases
+!frontend/.yarn/versions
 
 # testing
 frontend/coverage
+
+# next.js
+frontend/.next
+frontend/out
 
 # production
 frontend/build
@@ -21,7 +34,19 @@ frontend/.env.local
 frontend/.env.development.local
 frontend/.env.test.local
 frontend/.env.production.local
+frontend/*.pem
 
 frontend/npm-debug.log*
 frontend/yarn-debug.log*
 frontend/yarn-error.log*
+frontend/.pnpm-debug.log*
+
+# env files (generic)
+frontend/.env*
+
+# vercel
+frontend/.vercel
+
+# typescript
+frontend/*.tsbuildinfo
+frontend/next-env.d.ts

@@ -24,7 +24,9 @@ int main()
     // Configure CORS settings
     cors
         .global()
-        .origin("http://frontend:3000") // Specify allowed origin(s)
+        //.origin("http://frontend:3000") // Specify allowed origin(s)
+        .origin("http://localhost:3000") // Allow localhost for development
+        .origin("http://127.0.0.1:3000")
         .methods("POST"_method, "OPTIONS"_method)
         .headers("Content-Type", "Authorization")
         .max_age(86400); // Optional: Cache preflight response
