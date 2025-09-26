@@ -15,6 +15,20 @@ export async function GET(req: Request) {
         if (!payload) return NextResponse.json({ error: 'invalid token' }, { status: 401 });
         const includeQuestions = new URL(req.url).searchParams.get('include') === 'questions';
         const instructorId = payload.role === 'student' ? (payload.instructorId as string) : payload.sub;
+        let rosterActive = true;
+        if (payload.role === 'student') {
+            // Validate that roster row still exists and is Active; deny access otherwise
+            // NOTE: For student tokens we encode the roster id in `sub` (see signStudentJwt).
+            // Earlier code incorrectly attempted to read a non-existent `rosterId` claim which
+            // caused all student validation to fail, triggering a silent logout loop.
+            const rosterId = payload.sub; // roster id
+            if (!rosterId) return NextResponse.json({ error: 'invalid student token' }, { status: 401 });
+            const { rows: rosterRows } = await withInstructorContext(instructorId, () => query<{ status: string }>(`SELECT status FROM roster WHERE id=$1 AND owner_id = current_setting('app.current_instructor')::uuid LIMIT 1`, [rosterId]));
+            if (!rosterRows.length || rosterRows[0].status !== 'Active') {
+                rosterActive = false;
+            }
+        }
+        if (!rosterActive) return NextResponse.json({ error: 'access revoked' }, { status: 403 });
         const { rows: assignments } = await withInstructorContext(instructorId, () =>
             query<Assignment>(`SELECT id, title, course, difficulty, points, due, tags, attempts_allowed as "attemptsAllowed" FROM assignments WHERE owner_id = current_setting('app.current_instructor')::uuid ORDER BY created_at DESC LIMIT 500`)
         );

@@ -72,8 +72,10 @@ export async function DELETE(req: Request) {
         if (!id) { try { const b = await req.json(); id = b?.id; } catch { /* ignore */ } }
         if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
 
-        await withInstructorContext(payload.sub, () => query(`DELETE FROM roster WHERE id=$1 AND owner_id = current_setting('app.current_instructor')::uuid`, [id]));
-        return NextResponse.json({ ok: true });
+        // Soft delete: mark status Removed so existing student tokens can be invalidated by membership checks
+        const { rows: removedRows } = await withInstructorContext(payload.sub, () => query<{ id: string }>(`UPDATE roster SET status='Removed' WHERE id=$1 AND owner_id = current_setting('app.current_instructor')::uuid RETURNING id`, [id]));
+        if (!removedRows.length) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+        return NextResponse.json({ ok: true, status: 'Removed' });
     } catch (e) {
         return NextResponse.json({ error: (e as Error).message || 'failed' }, { status: 500 });
     }
