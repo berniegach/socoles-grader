@@ -1,6 +1,7 @@
 'use client';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Box, Button, Card, CardContent, CardHeader, Chip, LinearProgress, Snackbar, Alert, Table, TableBody, TableCell, TableHead, TableRow, TextField, Stack, IconButton, Tooltip } from '@mui/material';
+import RefreshIcon from '@mui/icons-material/Refresh';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -30,7 +31,34 @@ export default function ClassRoster() {
             if (Array.isArray(data)) setRows(data);
         } catch (e: any) { setErr(e.message || 'Failed to load'); } finally { setBusy(false); }
     }
+    // Initial load
     useEffect(() => { load(); }, []);
+
+    // Polling & focus/visibility-based refresh
+    const pollRef = useRef<number | null>(null);
+    const stopPolling = () => { if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; } };
+    const startPolling = () => {
+        stopPolling();
+        // Poll every 20s while component is mounted & tab visible
+        pollRef.current = window.setInterval(() => {
+            if (document.visibilityState === 'visible') {
+                load();
+            }
+        }, 20000);
+    };
+    useEffect(() => {
+        startPolling();
+        function onVisibility() { if (document.visibilityState === 'visible') load(); }
+        function onFocus() { load(); }
+        window.addEventListener('visibilitychange', onVisibility);
+        window.addEventListener('focus', onFocus);
+        return () => {
+            stopPolling();
+            window.removeEventListener('visibilitychange', onVisibility);
+            window.removeEventListener('focus', onFocus);
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     async function addOne() {
         if (!name.trim() || !email.trim()) { setErr('Name and email required'); return; }
@@ -118,12 +146,19 @@ export default function ClassRoster() {
 
     return (
         <PageCard>
-            <CardHeader title="Class Roster" action={<>
+            <CardHeader title="Class Roster" action={<Stack direction="row" spacing={1}>
                 <Button variant="outlined" component="label" startIcon={<UploadFileIcon />} disabled={busy}>
                     Import CSV
                     <input hidden accept=".csv" type="file" onChange={onCsv} />
                 </Button>
-            </>} />
+                <Tooltip title="Refresh now">
+                    <span>
+                        <IconButton aria-label="refresh" onClick={() => load()} disabled={busy} size="small">
+                            <RefreshIcon fontSize="small" />
+                        </IconButton>
+                    </span>
+                </Tooltip>
+            </Stack>} />
             {busy && <LinearProgress />}
             <CardContent>
                 <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} alignItems={{ xs: 'stretch', sm: 'flex-end' }} sx={{ mb: 2 }}>
