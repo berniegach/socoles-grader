@@ -1,10 +1,12 @@
 "use client";
 import { use, useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Box, Card, CardContent, CardHeader, TextField, Button, Alert, LinearProgress, Typography, Stack } from '@mui/material';
 import { useAuth } from '@/features/auth/AuthProvider';
 
 export default function InviteAcceptPage({ params }: { params: Promise<{ token: string }> }) {
     const { token } = use(params);
+    const router = useRouter();
     const [name, setName] = useState('');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -62,8 +64,12 @@ export default function InviteAcceptPage({ params }: { params: Promise<{ token: 
             localStorage.setItem('sqlgrader.student', JSON.stringify({ token: studentToken, id: student?.id, email: student?.email, name: student?.name, instructorId: student?.instructorId }));
             setUser({ name: student?.email, role: 'student', token: studentToken, instructorId: student?.instructorId });
             setNote('Invite accepted. Redirecting...');
-            // navigate by telling AppShell to focus student dashboard
+            // Persist desired initial tab before landing on root
+            try { sessionStorage.setItem('appshell.active', 's-dash'); } catch { /* ignore */ }
+            // Fire event in case user remains on same page with shell already mounted (unlikely)
             window.dispatchEvent(new CustomEvent('appshell:navigate', { detail: { id: 's-dash' } }));
+            // Navigate to home so AppShell mounts (if not already)
+            router.push('/');
         } catch (e: unknown) {
             setErr(e instanceof Error ? e.message : 'Failed');
         } finally {
