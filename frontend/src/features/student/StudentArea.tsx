@@ -237,7 +237,6 @@ export default function StudentArea({ active }: { active: string }) {
         const res = await simulateCppGrade(sql);
         setGrade(res.grade);
         setFeedback(res.feedback);
-        // Map legacy or backend rubric to new fields
         if (res.rubric && typeof res.rubric === 'object') {
             const anyR: any = res.rubric;
             const mapped = {

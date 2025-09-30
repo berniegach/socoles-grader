@@ -315,8 +315,8 @@ export default function AssignmentQuestionManager() {
                                         <Card key={a.id} variant='outlined' sx={{ display: 'flex', flexDirection: 'column', position: 'relative' }}>
                                             <CardActionArea onClick={() => setSelectedId(a.id)} sx={{ alignSelf: 'stretch' }}>
                                                 <CardHeader
-                                                    title={<Typography variant='subtitle1' sx={{ fontWeight: 600, lineHeight: 1.2 }} noWrap>{a.title}</Typography>}
-                                                    subheader={<Typography variant='caption' color='text.secondary' noWrap>{a.course}</Typography>}
+                                                    title={<Typography variant='subtitle1' sx={{ fontWeight: 600, lineHeight: 1.2 }}>{a.title}</Typography>}
+                                                    subheader={<Typography variant='caption' color='text.secondary'>{a.course}</Typography>}
                                                 />
                                                 <CardContent sx={{ pt: 0, display: 'grid', gap: 1 }}>
                                                     <Box sx={{ display: 'flex', gap: .75, flexWrap: 'wrap' }}>

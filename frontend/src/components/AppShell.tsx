@@ -83,7 +83,7 @@ export default function AppShell() {
         <Box sx={{ display: 'flex', minHeight: '100vh' }}>
             <AppBar position="fixed" sx={{ zIndex: (t) => t.zIndex.drawer + 1 }}>
                 <Toolbar sx={{ gap: 2 }}>
-                    <Box component="img" src="/icons/socoles-logo.png" alt="SOCOLES" sx={{ height: 32, width: 'auto', display: 'block' }} />
+                    <Box component="img" src="/icons/student.gif" alt="Student" sx={{ height: 40, width: 'auto', display: 'block', borderRadius: 1 }} />
                     <Typography variant="h6" sx={{ flexGrow: 1 }}>
                         Welcome back, {displayName || user?.name?.split('@')[0] || 'friend'}!
                     </Typography>

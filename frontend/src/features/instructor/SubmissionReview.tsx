@@ -206,7 +206,10 @@ export default function SubmissionReview() {
                             <>
                                 <Box sx={{ mb: 2 }}>
                                     <Typography variant='subtitle1' sx={{ mb: 1 }}>Assignment Overview</Typography>
-                                    <ResultsCharts results={rows.map(r => ({ Grade: (r as any).grade ?? 0 }))} />
+                                    <ResultsCharts
+                                        results={rows.map(r => ({ Grade: (r as any).grade ?? 0 }))}
+                                        loadAttemptsFor={selectedAssignment ? { assignmentId: selectedAssignment.id, student: (rows[0]?.student || ''), token: user?.token } : undefined}
+                                    />
                                 </Box>
                                 <Divider sx={{ my: 2 }} />
                                 <Table size="small">
