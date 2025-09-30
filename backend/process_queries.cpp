@@ -456,6 +456,18 @@ std::vector<ProcessQueries::grading_info> ProcessQueries::get_grading_info(const
         info.grade = grade;
         info.out_of = 1;
         info.feedback = message;
+        // Compute normalized rubric values per property
+        Grader grader; // lightweight helper
+        auto rubric_vals = grader.get_normalized_property_values(
+            admin.get_syntax_sensitivity(),
+            admin.get_semantics_sensitivity(),
+            admin.get_results_sensitivity(),
+            queries->at(i).get_results_outcome(),
+            queries->at(i).get_semantics_outcome(),
+            queries->at(i).get_syntax_outcome());
+        info.rubric_syntax = rubric_vals["syntax"];
+        info.rubric_semantics = rubric_vals["semantics"];
+        info.rubric_results = rubric_vals["results"];
 
         grading_info_vector.push_back(info);
     }

@@ -177,9 +177,10 @@ export default function InstructorSubmissionPlayer({ assignmentId, submission, o
                             <GradeDisplay grade={typeof currentAttempt?.grade === 'number' ? currentAttempt.grade : null} denom={typeof currentAttempt?.grade === 'number' ? ((currentAttempt.grade <= 1) ? 1 : 10) : null} />
                             <Divider sx={{ my: 1.5 }} />
                             <RubricBars rubric={{
-                                correctness: Number(currentAttempt?.rubric?.correctness ?? 0),
-                                style: Number(currentAttempt?.rubric?.style ?? 0),
-                                efficiency: Number(currentAttempt?.rubric?.efficiency ?? 0),
+                                syntax: Number(currentAttempt?.rubric?.syntax ?? currentAttempt?.rubric?.correctness ?? 0),
+                                semantics: Number(currentAttempt?.rubric?.semantics ?? currentAttempt?.rubric?.style ?? 0),
+                                results: Number(currentAttempt?.rubric?.results ?? currentAttempt?.rubric?.efficiency ?? 0),
+                                absent: currentAttempt?.rubric?.absent
                             }} />
                             <Box sx={{ mt: 2 }}>
                                 <Typography variant='body2' color='text.secondary'>Feedback</Typography>

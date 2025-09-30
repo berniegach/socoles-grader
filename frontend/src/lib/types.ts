@@ -1,5 +1,5 @@
 export type Role = 'student' | 'instructor';
-export interface Rubric { correctness: number; style: number; efficiency: number }
+export interface Rubric { syntax: number | null; semantics: number | null; results: number | null; absent?: { syntax?: boolean; semantics?: boolean; results?: boolean } }
 export interface GradeResponse { grade: number; feedback: string[]; rubric: Rubric }
 // Multi-tenant additions: instructor ownership & course instances
 export interface Instructor { id: string; email: string; name: string; createdAt: string }
@@ -67,11 +67,11 @@ export interface NewQuestionPayload {
 
 // Rubric structure used for per-question grading persistence
 export interface QuestionRubric {
-    correctness: number | null;
-    style?: number | null;
-    efficiency?: number | null;
-    // allow additional rubric metrics in future without loosening to any
-    [extra: string]: number | null | undefined;
+    syntax: number | null;
+    semantics: number | null;
+    results: number | null;
+    absent?: { syntax?: boolean; semantics?: boolean; results?: boolean };
+    [extra: string]: number | null | object | undefined;
 }
 
 export interface QuestionSubmission {

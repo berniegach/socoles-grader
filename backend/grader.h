@@ -103,5 +103,19 @@ public:
 	void display_correctness_matrix(std::vector<properties> matrix);
 	void format_output(string original_file);
 	std::string property_state_to_string(property_state state);
+	/**
+	 * This function returns normalized values for each property outcome.
+	 * It is used to show the rubric of the grading.
+	 * Each property value corresponds to the query outcome versus the maximum possible outcome for that property
+	 * which is dependent on the grading properties chosen.
+	 * @param sn_level: number of syntax outcomes
+	 * @param sm_level: number of semantic outcomes
+	 * @param rs_level: number of results outcomes
+	 * @param results: the results outcome of the query
+	 * @param semantics: the semantics outcome of the query
+	 * @param syntax: the syntax outcome of the query
+	 * @return: a map of property names to their normalized values.
+	 */
+	map<string, double> get_normalized_property_values(property_level sn_level, property_level sm_level, property_level rs_level, property_state results, property_state semantics, property_state syntax);
 };
 #endif // !GRADER_H

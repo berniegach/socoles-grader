@@ -8,7 +8,7 @@ async function ensureInit() { if (!initialized) { await initSchema(); initialize
 
 // In-memory job store for async grading
 type JobStatus = 'queued' | 'running' | 'succeeded' | 'failed';
-type JobRecord = { id: string; status: JobStatus; result?: GradeSubmissionResponse; error?: string };
+type JobRecord = { id: string; status: JobStatus; result?: GradeSubmissionResponse; error?: string }
 const jobs: Record<string, JobRecord> = {};
 function newJobId() { return Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2); }
 
@@ -62,6 +62,7 @@ async function gradeSubmissionCore(instructorId: string, submissionId: string): 
         }
 
         for (const q of questions) {
+            let rb: QuestionRubric | null = null; // holds parsed rubric for this question iteration
             const qs = qsByQ[q.id];
             const title = q.title || q.id;
             // If no answer captured or empty SQL, flag as needs review
@@ -124,9 +125,23 @@ async function gradeSubmissionCore(instructorId: string, submissionId: string): 
                 // Apply a server-side timeout of 25s per question
                 const resp = await fetchWithTimeout(`${API_BASE}${GRADE_PATH}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }, 25000);
                 if (!resp.ok) throw new Error(`Grader error (${resp.status})`);
-                let g: number | null = null; let fb: string[] = [];
+                let g: number | null = null; let fb: string[] = []; rb = null;
                 try {
                     const data: unknown = await resp.json();
+                    const extractRubric = (obj: Record<string, unknown>) => {
+                        const r = obj.Rubric || obj.rubric;
+                        if (r && typeof r === 'object') {
+                            const rr = r as Record<string, unknown>;
+                            const syn = typeof rr.syntax === 'number' ? rr.syntax : null;
+                            const sem = typeof rr.semantics === 'number' ? rr.semantics : null;
+                            const resu = typeof rr.results === 'number' ? rr.results : null;
+                            const absent: any = {};
+                            if (syn === null) absent.syntax = true;
+                            if (sem === null) absent.semantics = true;
+                            if (resu === null) absent.results = true;
+                            rb = { syntax: syn, semantics: sem, results: resu, absent };
+                        }
+                    };
                     if (Array.isArray(data) && data.length) {
                         const first = data[0] as Record<string, unknown>;
                         const candidates = [first.Score, first.score, first.Grade, first.grade, first.finalScore, first.final_score];
@@ -134,6 +149,7 @@ async function gradeSubmissionCore(instructorId: string, submissionId: string): 
                         g = typeof gParsed === 'number' ? gParsed : null;
                         const raw = (first.Feedback ?? first.feedback ?? '') as unknown;
                         fb = Array.isArray(raw) ? raw as string[] : String(raw).split(/;|\n/).filter((s: string) => s.trim());
+                        extractRubric(first);
                     } else if (data && typeof data === 'object') {
                         const anyData = data as Record<string, unknown>;
                         const candidates = [anyData.Score, anyData.score, anyData.Grade, anyData.grade, anyData.finalScore, anyData.final_score];
@@ -141,6 +157,7 @@ async function gradeSubmissionCore(instructorId: string, submissionId: string): 
                         g = typeof gParsed === 'number' ? gParsed : null;
                         const raw = (anyData.Feedback ?? anyData.feedback ?? '') as unknown;
                         fb = Array.isArray(raw) ? raw as string[] : String(raw).split(/;|\n/).filter((s: string) => s.trim());
+                        extractRubric(anyData);
                     }
                 } catch { /* ignore parse errors */ }
                 if (g === null) {
@@ -159,7 +176,13 @@ async function gradeSubmissionCore(instructorId: string, submissionId: string): 
 
             // Persist result back into question_submissions and (optionally) history
             try {
-                const rubric: QuestionRubric | null = gradeVal != null ? { correctness: (gradeVal || 0) * 10, style: 60, efficiency: 50 } : null;
+                // Use parsed rubric (rb) if available; otherwise null
+                let rubric: QuestionRubric | null = null;
+                if (rb) {
+                    rubric = rb;
+                } else if (gradeVal != null) {
+                    rubric = { syntax: gradeVal, semantics: gradeVal, results: gradeVal, absent: {} };
+                }
                 await query(`UPDATE question_submissions SET grade=$2, rubric=$3, feedback=$4, status=$5 WHERE id=$1 AND owner_id = current_setting('app.current_instructor')::uuid`, [qs.id, gradeVal, rubric, feedback, status]);
                 // Do not increment attempt or create history on automatic grading
             } catch (e: unknown) {

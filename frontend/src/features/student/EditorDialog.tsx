@@ -15,7 +15,7 @@ export default function EditorDialog({
     open: boolean; setOpen: (v: boolean) => void;
     sql: string; setSql: (v: string) => void;
     grading: boolean; grade: number | null; feedback: string[];
-    rubric: { correctness: number; style: number; efficiency: number };
+    rubric: { syntax: number | null; semantics: number | null; results: number | null; absent?: { syntax?: boolean; semantics?: boolean; results?: boolean } };
     onRun: () => void;
 }) {
     const [tab, setTab] = useState(1); // 0=schema,1=editor
@@ -79,18 +79,18 @@ export default function EditorDialog({
 
                                 <Box sx={{ mt: 2, display: 'grid', gap: 1 }}>
                                     <Typography variant="body2" color="text.secondary">Rubric</Typography>
-                                    <Box>
-                                        <Typography variant="caption">Correctness ({rubric.correctness}%)</Typography>
-                                        <LinearProgress variant="determinate" value={rubric.correctness} />
-                                    </Box>
-                                    <Box>
-                                        <Typography variant="caption">Style ({rubric.style}%)</Typography>
-                                        <LinearProgress variant="determinate" value={rubric.style} />
-                                    </Box>
-                                    <Box>
-                                        <Typography variant="caption">Efficiency ({rubric.efficiency}%)</Typography>
-                                        <LinearProgress variant="determinate" value={rubric.efficiency} />
-                                    </Box>
+                                    {(['syntax', 'semantics', 'results'] as const).map(key => {
+                                        const val = rubric[key];
+                                        const absent = !!rubric.absent?.[key];
+                                        const pct = typeof val === 'number' ? Math.round(val * 100) : 0;
+                                        const label = key.charAt(0).toUpperCase() + key.slice(1);
+                                        return (
+                                            <Box key={key} sx={{ opacity: absent ? 0.35 : 1 }}>
+                                                <Typography variant="caption">{label} {absent ? '(n/a)' : `(${pct}%)`}</Typography>
+                                                <LinearProgress variant="determinate" value={absent ? 0 : pct} />
+                                            </Box>
+                                        );
+                                    })}
                                 </Box>
                             </CardContent>
                         </Card>

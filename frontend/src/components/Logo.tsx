@@ -17,11 +17,9 @@ export interface LogoProps {
  *  - bg: framed logo with its own background (logo + bg.svg) good for favicon/app icons
  */
 export const Logo: React.FC<LogoProps> = ({ variant = 'default', height = 56, title = 'SOCOLES', sx }) => {
-    const src = variant === 'white'
-        ? '/icons/white.svg'
-        : variant === 'bg'
-            ? '/icons/logo%20+%20bg.svg'
-            : '/icons/logo.svg';
+    // For now all variants point to the unified socoles-logo.png asset.
+    // (If white/bg variants are re-introduced later, branch here by variant.)
+    const src = '/icons/socoles-logo.png';
     return (
         <Box
             component="img"

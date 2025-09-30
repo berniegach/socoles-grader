@@ -15,15 +15,15 @@ export const demoSubmissions: Submission[] = [
 
 export function simulateCppGrade(sql: string): Promise<GradeResponse> {
     const normalized = (sql || '').toLowerCase();
-    const correctness = normalized.includes('select') ? 0.7 : 0.2;
-    const style = normalized.includes('join') ? 0.8 : 0.6;
-    const efficiency = normalized.includes('where') ? 0.75 : 0.5;
-    const grade = Math.round(((correctness + style + efficiency) / 3) * 10 * 10) / 10;
+    const syntax = normalized.includes('select') ? 0.7 : 0.2;
+    const semantics = normalized.includes('join') ? 0.8 : 0.6;
+    const results = normalized.includes('where') ? 0.75 : 0.5;
+    const grade = Math.round(((syntax + semantics + results) / 3) * 10 * 10) / 10;
     const feedback = [
-        correctness > 0.6 ? 'Query returns the expected columns for most test cases.' : 'Result shape mismatches the expected output in several tests.',
-        style > 0.7 ? 'Joins are used appropriately and aliases improve readability.' : 'Consider clearer aliasing and consistent indentation.',
-        efficiency > 0.7 ? 'WHERE filters are effective; indexes likely reduce scan cost.' : 'Consider filtering earlier or limiting the result set.',
+        syntax > 0.6 ? 'Basic SQL structure is mostly correct.' : 'Syntax issues detected in clauses or order.',
+        semantics > 0.7 ? 'Joins and relationships inferred correctly.' : 'Potential logical issues in joins or aggregations.',
+        results > 0.7 ? 'Output tuples align with expected test results.' : 'Returned rows/values differ from expected outcomes.',
     ];
-    const rubric = { correctness: Math.round(correctness * 100), style: Math.round(style * 100), efficiency: Math.round(efficiency * 100) };
+    const rubric = { syntax, semantics, results };
     return new Promise((resolve) => setTimeout(() => resolve({ grade, feedback, rubric }), 600));
 }

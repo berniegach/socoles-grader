@@ -26,7 +26,7 @@ int main()
         .global()
         //.origin("http://frontend:3000") // Specify allowed origin(s)
         .origin("http://localhost:3000") // Allow localhost for development
-        .origin("http://127.0.0.1:3000")
+        //.origin("http://127.0.0.1:3000")
         .methods("POST"_method, "OPTIONS"_method)
         .headers("Content-Type", "Authorization")
         .max_age(86400); // Optional: Cache preflight response
@@ -265,17 +265,21 @@ int main()
                                                                                                          // Prepare the JSON response
                                                                                                          index = 0;
                                                                                                          crow::json::wvalue jsonResults;
-                                                                                                         for (const auto &info : grading_info)
-                                                                                                         {
-                                                                                                             jsonResults[index]["Org Defined ID"] = info.org_defined_id;
-                                                                                                             jsonResults[index]["Attempt #"] = info.attempt_number;
-                                                                                                             jsonResults[index]["Q #"] = info.question_number;
-                                                                                                             jsonResults[index]["Query"] = info.query;
-                                                                                                             jsonResults[index]["Grade"] = info.grade;
-                                                                                                             jsonResults[index]["Out Of"] = info.out_of;
-                                                                                                             jsonResults[index]["Feedback"] = info.feedback;
-                                                                                                             index++;
-                                                                                                         }
+                                                                                                        for (const auto &info : grading_info)
+                                                                                                        {
+                                                                                                            jsonResults[index]["Org Defined ID"] = info.org_defined_id;
+                                                                                                            jsonResults[index]["Attempt #"] = info.attempt_number;
+                                                                                                            jsonResults[index]["Q #"] = info.question_number;
+                                                                                                            jsonResults[index]["Query"] = info.query;
+                                                                                                            jsonResults[index]["Grade"] = info.grade;
+                                                                                                            jsonResults[index]["Out Of"] = info.out_of;
+                                                                                                            jsonResults[index]["Feedback"] = info.feedback;
+                                                                                                            // Rubric normalized values (0..1)
+                                                                                                            jsonResults[index]["Rubric"]["syntax"] = info.rubric_syntax;
+                                                                                                            jsonResults[index]["Rubric"]["semantics"] = info.rubric_semantics;
+                                                                                                            jsonResults[index]["Rubric"]["results"] = info.rubric_results;
+                                                                                                            index++;
+                                                                                                        }
 
                                                                                                          res.code = 200; // OK
                                                                                                          res.set_header("Content-Type", "application/json");

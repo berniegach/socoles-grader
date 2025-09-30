@@ -25,6 +25,10 @@ public:
         double grade;
         double out_of;
         std::string feedback;
+        // Normalized rubric values (0..1) for each property
+        double rubric_syntax = 0.0;
+        double rubric_semantics = 0.0;
+        double rubric_results = 0.0;
     };
     ProcessQueries();
     ProcessQueries(vector<ModelQuery> &model_queries, vector<StudentQuery> &student_queries, Admin::database_options db_opts, const Admin &admin, Grader &grader);

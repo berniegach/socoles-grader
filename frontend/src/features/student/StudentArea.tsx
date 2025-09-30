@@ -141,7 +141,7 @@ export default function StudentArea({ active }: { active: string }) {
     const [grading, setGrading] = useState(false);
     const [grade, setGrade] = useState<number | null>(null);
     const [feedback, setFeedback] = useState<string[]>([]);
-    const [rubric, setRubric] = useState({ correctness: 0, style: 0, efficiency: 0 });
+    const [rubric, setRubric] = useState<{ syntax: number | null; semantics: number | null; results: number | null; absent?: { syntax?: boolean; semantics?: boolean; results?: boolean } }>({ syntax: 0, semantics: 0, results: 0 });
     const [editorOpen, setEditorOpen] = useState(false);
     const [assignments, setAssignments] = useState<AssignmentApi[]>([]);
     const [submissions, setSubmissions] = useState<SubmissionApi[]>([]);
@@ -237,7 +237,19 @@ export default function StudentArea({ active }: { active: string }) {
         const res = await simulateCppGrade(sql);
         setGrade(res.grade);
         setFeedback(res.feedback);
-        setRubric(res.rubric);
+        // Map legacy or backend rubric to new fields
+        if (res.rubric && typeof res.rubric === 'object') {
+            const anyR: any = res.rubric;
+            const mapped = {
+                syntax: (typeof anyR.syntax === 'number' ? anyR.syntax : (typeof anyR.correctness === 'number' ? anyR.correctness / 100 : 0)),
+                semantics: (typeof anyR.semantics === 'number' ? anyR.semantics : (typeof anyR.style === 'number' ? anyR.style / 100 : 0)),
+                results: (typeof anyR.results === 'number' ? anyR.results : (typeof anyR.efficiency === 'number' ? anyR.efficiency / 100 : 0)),
+                absent: anyR.absent || {}
+            };
+            setRubric(mapped);
+        } else {
+            setRubric({ syntax: 0, semantics: 0, results: 0 });
+        }
         setGrading(false);
     }
 

@@ -37,7 +37,7 @@ export default function StudentAssignmentPlayer({ assignmentId, onClose, onSubmi
     const [grading, setGrading] = useState(false);
     const [grade, setGrade] = useState<number | null>(null);
     const [feedback, setFeedback] = useState<string[]>([]);
-    const [rubric, setRubric] = useState<Rubric>({ correctness: 0, style: 0, efficiency: 0 });
+    const [rubric, setRubric] = useState<Rubric>({ syntax: 0, semantics: 0, results: 0 });
     const [tab, setTab] = useState(1); // 0 schema,1 editor
     const [questionDetail, setQuestionDetail] = useState<Partial<{ prompt: string; hints?: string; modelQueries?: string[]; modelSql?: string; initSql?: string; useDefaultGrading?: boolean; gradingOptions?: any }> | null>(null);
     const [qLoading, setQLoading] = useState(false);
@@ -138,7 +138,7 @@ export default function StudentAssignmentPlayer({ assignmentId, onClose, onSubmi
             setAssignment(found);
             setActiveIdx(0);
             setSql('');
-            setGrade(null); setFeedback([]); setRubric({ correctness: 0, style: 0, efficiency: 0 });
+            setGrade(null); setFeedback([]); setRubric({ syntax: 0, semantics: 0, results: 0 });
             setSubmission(null); setSubmitted(false); setIsLocked(false);
             setAttemptMap({});
             setQsIdByQuestion({});
@@ -278,12 +278,13 @@ export default function StudentAssignmentPlayer({ assignmentId, onClose, onSubmi
             setGrade(draft.grade);
             setFeedback(draft.feedback);
             setRubric({
-                correctness: typeof draft.rubric?.correctness === 'number' ? draft.rubric.correctness : 0,
-                style: typeof draft.rubric?.style === 'number' ? draft.rubric.style : 0,
-                efficiency: typeof draft.rubric?.efficiency === 'number' ? draft.rubric.efficiency : 0,
+                syntax: typeof draft.rubric?.syntax === 'number' ? draft.rubric.syntax : 0,
+                semantics: typeof draft.rubric?.semantics === 'number' ? draft.rubric.semantics : 0,
+                results: typeof draft.rubric?.results === 'number' ? draft.rubric.results : 0,
+                absent: draft.rubric?.absent
             });
         } else {
-            setSql(''); setGrade(null); setFeedback([]); setRubric({ correctness: 0, style: 0, efficiency: 0 });
+            setSql(''); setGrade(null); setFeedback([]); setRubric({ syntax: 0, semantics: 0, results: 0 });
         }
         // Close history when switching questions
         setHistoryOpen(false);
@@ -400,20 +401,47 @@ export default function StudentAssignmentPlayer({ assignmentId, onClose, onSubmi
                         const g = Number(first.Score || first.grade || first.Grade || 0);
                         const rawFb = (first.Feedback || first.feedback || '') as string;
                         const fb = Array.isArray(rawFb) ? rawFb : String(rawFb).split(/;|\n/).filter((s: string) => s.trim());
-                        gradeResult = { grade: g, feedback: fb, rubric: { correctness: g * 10, style: 60, efficiency: 50 } } as any;
+                        const r = first.Rubric || first.rubric;
+                        let rb: Rubric = { syntax: 0, semantics: 0, results: 0 } as any;
+                        if (r && typeof r === 'object') {
+                            rb = {
+                                syntax: typeof r.syntax === 'number' ? r.syntax : null,
+                                semantics: typeof r.semantics === 'number' ? r.semantics : null,
+                                results: typeof r.results === 'number' ? r.results : null,
+                                absent: {
+                                    syntax: typeof r.syntax !== 'number',
+                                    semantics: typeof r.semantics !== 'number',
+                                    results: typeof r.results !== 'number'
+                                }
+                            };
+                        }
+                        gradeResult = { grade: g, feedback: fb, rubric: rb } as any;
                     } else if (data && typeof data === 'object') {
                         const anyData = data as any;
                         const g = Number(anyData.grade || anyData.score || anyData.Grade || anyData.Score || 0);
                         const fb = Array.isArray(anyData.feedback) ? anyData.feedback : [];
-                        gradeResult = { grade: g, feedback: fb, rubric: { correctness: g * 10, style: 60, efficiency: 50 } } as any;
+                        const r = (anyData as any).Rubric || (anyData as any).rubric;
+                        let rb: Rubric = { syntax: 0, semantics: 0, results: 0 } as any;
+                        if (r && typeof r === 'object') {
+                            rb = {
+                                syntax: typeof r.syntax === 'number' ? r.syntax : null,
+                                semantics: typeof r.semantics === 'number' ? r.semantics : null,
+                                results: typeof r.results === 'number' ? r.results : null,
+                                absent: {
+                                    syntax: typeof r.syntax !== 'number',
+                                    semantics: typeof r.semantics !== 'number',
+                                    results: typeof r.results !== 'number'
+                                }
+                            };
+                        }
+                        gradeResult = { grade: g, feedback: fb, rubric: rb } as any;
                     }
                 }
             } catch { /* network/timeout failure -> fallback placeholder below */ }
             if (!gradeResult) {
                 // Fallback placeholder if autograder not reachable
                 const newGrade = 0; // 0..1 with 2 decimals
-                // Do not increment attempt on timeouts/failures; present non-incremental placeholder
-                gradeResult = { grade: newGrade, feedback: ['Autograder unavailable or timed out.'], rubric: { correctness: 70, style: 60, efficiency: 55 } } as any;
+                gradeResult = { grade: newGrade, feedback: ['Autograder unavailable or timed out.'], rubric: { syntax: 0, semantics: 0, results: 0, absent: { syntax: true, semantics: true, results: true } } as any } as any;
             }
             const finalResult = gradeResult as { grade: number; feedback: string[]; rubric: Rubric };
             const { grade: gVal, feedback: fbVal, rubric: rbVal } = finalResult;
@@ -580,12 +608,12 @@ export default function StudentAssignmentPlayer({ assignmentId, onClose, onSubmi
     function next() {
         saveDraftFor(currentQuestion);
         setActiveIdx(i => Math.min(i + 1, (assignment?.questions?.length || 1) - 1));
-        setGrade(null); setFeedback([]); setRubric({ correctness: 0, style: 0, efficiency: 0 }); setSql('');
+        setGrade(null); setFeedback([]); setRubric({ syntax: 0, semantics: 0, results: 0 }); setSql('');
     }
     function prev() {
         saveDraftFor(currentQuestion);
         setActiveIdx(i => Math.max(i - 1, 0));
-        setGrade(null); setFeedback([]); setRubric({ correctness: 0, style: 0, efficiency: 0 }); setSql('');
+        setGrade(null); setFeedback([]); setRubric({ syntax: 0, semantics: 0, results: 0 }); setSql('');
     }
 
     if (!assignmentId) return null;

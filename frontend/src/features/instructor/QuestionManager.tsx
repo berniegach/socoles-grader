@@ -241,7 +241,7 @@ export default function QuestionManager() {
     const [attemptsAllowed] = useState(3);
     const [attemptsUsed, setAttemptsUsed] = useState(0);
     const attemptsLeft = Math.max(0, attemptsAllowed - attemptsUsed);
-    const [rubric, setRubric] = useState<{ correctness: number; style: number; efficiency: number }>({ correctness: 0, style: 0, efficiency: 0 });
+    const [rubric, setRubric] = useState<{ syntax: number | null; semantics: number | null; results: number | null; absent?: { syntax?: boolean; semantics?: boolean; results?: boolean } }>({ syntax: 0, semantics: 0, results: 0 });
     // Per-question grading parameters
     const savedDefaults: GradingOptionsType = useMemo(() => {
         try {
@@ -268,7 +268,7 @@ export default function QuestionManager() {
             setPreviewLoading(false);
             setPreviewTab(1);
             setAttemptsUsed(0);
-            setRubric({ correctness: 0, style: 0, efficiency: 0 });
+            setRubric({ syntax: 0, semantics: 0, results: 0 });
             return;
         }
         const id = selectedId || editingId;
@@ -281,7 +281,7 @@ export default function QuestionManager() {
         setPreviewLoading(true);
         setPreviewTab(1);
         setAttemptsUsed(0);
-        setRubric({ correctness: 0, style: 0, efficiency: 0 });
+        setRubric({ syntax: 0, semantics: 0, results: 0 });
         if (!id) {
             // No saved question selected; preview current form values
             setPreviewData(null);
@@ -344,17 +344,43 @@ export default function QuestionManager() {
                 g = Number(first?.Score || first?.grade || first?.Grade || 0);
                 const rawFb = first?.Feedback || first?.feedback || '';
                 fb = Array.isArray(rawFb) ? rawFb : String(rawFb).split(/;|\n/).filter((s: string) => s.trim());
+                const r = first.Rubric || first.rubric;
+                if (r && typeof r === 'object') {
+                    setRubric({
+                        syntax: typeof r.syntax === 'number' ? r.syntax : null,
+                        semantics: typeof r.semantics === 'number' ? r.semantics : null,
+                        results: typeof r.results === 'number' ? r.results : null,
+                        absent: {
+                            syntax: typeof r.syntax !== 'number',
+                            semantics: typeof r.semantics !== 'number',
+                            results: typeof r.results !== 'number'
+                        }
+                    });
+                }
             } else if (data && typeof data === 'object') {
                 const obj: any = data;
                 g = Number(obj.score || obj.Score || obj.grade || obj.Grade || 0);
                 fb = Array.isArray(obj.feedback) ? obj.feedback : [];
+                const r = obj.Rubric || obj.rubric;
+                if (r && typeof r === 'object') {
+                    setRubric({
+                        syntax: typeof r.syntax === 'number' ? r.syntax : null,
+                        semantics: typeof r.semantics === 'number' ? r.semantics : null,
+                        results: typeof r.results === 'number' ? r.results : null,
+                        absent: {
+                            syntax: typeof r.syntax !== 'number',
+                            semantics: typeof r.semantics !== 'number',
+                            results: typeof r.results !== 'number'
+                        }
+                    });
+                }
             }
             setPreviewGrade(g);
             setPreviewFeedback(fb);
-            // Simple rubric estimation (correctness scaled by grade fraction if <=1 else normalized to 100)
-            const maxPts = q.maxPoints || maxPoints || 1;
-            const frac = g <= 1 ? g : (g > maxPts ? (g / maxPts) : (g / maxPts));
-            setRubric({ correctness: Math.min(100, Math.round(frac * 100)), style: 60, efficiency: 55 });
+            if (!fb.length || !g) {
+                // fallback if no rubric extracted
+                setRubric(r => ({ syntax: r.syntax ?? 0, semantics: r.semantics ?? 0, results: r.results ?? 0, absent: r.absent || { syntax: true, semantics: true, results: true } }));
+            }
         } catch (e) {
             const msg = (e as Error)?.message || 'Autograder request failed.';
             setPreviewFeedback([`Autograder request failed: ${msg}`]);
