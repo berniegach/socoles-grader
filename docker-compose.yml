@@ -3,21 +3,23 @@ services:
   db:
     image: postgres:14
     restart: unless-stopped
+    env_file:
+      - .env
     environment:
-      POSTGRES_USER: back-user
-      POSTGRES_PASSWORD: adgadjhasg^jagsfgc891732
-      POSTGRES_DB: grader
+      - POSTGRES_USER=socoles-web
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=manageclass
     volumes:
       - pg_data:/var/lib/postgresql/data
       - ./docker/db-init:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U back-user" ]
+      test: [ "CMD-SHELL", "pg_isready -U socoles-web" ]
       interval: 5s
       timeout: 5s
       retries: 5
 
   backend:
-    image: ghcr.io/berniegach/socoles-backend:1.0.0
+    image: ${BACKEND_IMAGE:-ghcr.io/berniegach/socoles-backend:1.0.0}
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -28,16 +30,18 @@ services:
     ports:
       # open only for local development
       - "127.0.0.1:5000:5000"
+    env_file:
+      - .env
     environment:
-      # libpq will pick these up
+      # Backend connects to secondary grader DB
       - PGHOST=db
       - PGPORT=5432
+      - PGUSER=socoles-web
+      - PGPASSWORD=${POSTGRES_PASSWORD}
       - PGDATABASE=grader
-      - PGUSER=back-user
-      - PGPASSWORD=adgadjhasg^jagsfgc891732
 
   frontend:
-    image: ghcr.io/berniegach/socoles-frontend:1.0.0
+    image: ${FRONTEND_IMAGE:-ghcr.io/berniegach/socoles-frontend:1.0.0}
     build:
       context: ./frontend
       dockerfile: Dockerfile
@@ -46,15 +50,17 @@ services:
     restart: unless-stopped
     ports:
       - "127.0.0.1:3000:3000"
+    env_file:
+      - .env
     environment:
       - NEXT_PUBLIC_SOCOLES_API_URL=http://localhost:5000
       - NEXT_PUBLIC_SOCOLES_GRADE_PATH=/grade-queries
       - SOCOLES_INTERNAL_API_URL=http://backend:5000
-      # Postgres connection for server-side Next.js code (pg Pool)
+      # Frontend uses primary DB (manageclass)
       - PGHOST=db
       - PGPORT=5432
-      - PGUSER=front-user
-      - PGPASSWORD=ajsdfgfhjgdfhdg$87676g5
+      - PGUSER=socoles-web
+      - PGPASSWORD=${POSTGRES_PASSWORD}
       - PGDATABASE=manageclass
       # HOST optional for Next.js listen address; uncomment if needed
       # - HOST=0.0.0.0

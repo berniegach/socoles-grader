@@ -229,8 +229,11 @@ export async function initSchema() {
   const tables = ['questions', 'datasets', 'assignments', 'submissions', 'assignment_questions', 'question_submissions', 'question_submission_attempts', 'roster'];
   for (const t of tables) {
     await query(`ALTER TABLE ${t} ENABLE ROW LEVEL SECURITY;`).catch(() => { });
-    await query(`CREATE POLICY IF NOT EXISTS ${t}_select_owner ON ${t} FOR SELECT USING (owner_id = current_setting('app.current_instructor', true)::uuid);`).catch(() => { });
-    await query(`CREATE POLICY IF NOT EXISTS ${t}_mod_owner ON ${t} FOR ALL USING (owner_id = current_setting('app.current_instructor', true)::uuid) WITH CHECK (owner_id = current_setting('app.current_instructor', true)::uuid);`).catch(() => { });
+    // Replace unsupported IF NOT EXISTS with explicit drop/create (idempotent)
+    await query(`DROP POLICY IF EXISTS ${t}_select_owner ON ${t};`).catch(() => { });
+    await query(`CREATE POLICY ${t}_select_owner ON ${t} FOR SELECT USING (owner_id = current_setting('app.current_instructor', true)::uuid);`).catch(() => { });
+    await query(`DROP POLICY IF EXISTS ${t}_mod_owner ON ${t};`).catch(() => { });
+    await query(`CREATE POLICY ${t}_mod_owner ON ${t} FOR ALL USING (owner_id = current_setting('app.current_instructor', true)::uuid) WITH CHECK (owner_id = current_setting('app.current_instructor', true)::uuid);`).catch(() => { });
   }
 
   // Seed demo data once (simple check by counting assignments & submissions)

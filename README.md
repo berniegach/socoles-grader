@@ -53,7 +53,15 @@ git clone https://github.com/berniegach/socoles-grader.git
 cd socoles-grader
 ```
 
-### 2. Build and start everything
+### 2. Create a .env file 
+Create a file named `.env` in the project root containing only your chosen PostgreSQL password.
+
+Example:
+```bash
+echo "POSTGRES_PASSWORD=change-me-strong" > .env
+```
+
+### 3. Build and start everything
 ```bash
 docker compose build 
 docker compose up -d
