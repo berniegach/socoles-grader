@@ -101,7 +101,7 @@ export default function AppShell() {
             }}>
                 <Toolbar />
                 <Box sx={{ p: 2, display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                    <Box component="img" src="/icons/socoles-logo.png" alt="SOCOLES Logo" sx={{ height: 40, width: 'auto', display: 'block' }} />
+                    <Box component="img" src="/icons/socoles-logo.svg" alt="SOCOLES Logo" sx={{ height: 40, width: 'auto', display: 'block' }} />
                     <Box>
                         <Typography fontWeight={600}>SOCOLES</Typography>
                         <Typography variant="caption" color="text.secondary">Making grading easier</Typography>
