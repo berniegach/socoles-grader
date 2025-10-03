@@ -29,6 +29,7 @@ import GradingOptions from '@/features/instructor/GradingOptions';
 import type { GradingOptions as GradingOptionsType } from '@/lib/types';
 import { DEFAULT_GRADING_OPTIONS } from '@/lib/api';
 import PageCard from '@/components/PageCard';
+import { useAuth } from '@/features/auth/AuthProvider';
 
 type Settings = {
     courseName: string;
@@ -49,6 +50,7 @@ const DEFAULTS: Settings = {
 };
 
 export default function InstructorSettings() {
+    const { user, setUser } = useAuth();
     const stored = useMemo(() => {
         try {
             const raw = localStorage.getItem('sqlgrader.settings');
@@ -65,6 +67,7 @@ export default function InstructorSettings() {
     const [s, setS] = useState<Settings>(stored);
     const [accountEmail, setAccountEmail] = useState<string>('');
     const [accountName, setAccountName] = useState<string>('');
+    const [nameDirty, setNameDirty] = useState(false);
     useEffect(() => {
         try {
             const raw = localStorage.getItem('auth.current');
@@ -75,6 +78,20 @@ export default function InstructorSettings() {
             }
         } catch { /* ignore */ }
     }, []);
+
+    function saveAccountName() {
+        try {
+            const raw = localStorage.getItem('auth.current');
+            const parsed = raw ? JSON.parse(raw) : {};
+            const next = { ...parsed, name: accountName };
+            localStorage.setItem('auth.current', JSON.stringify(next));
+            if (user) setUser({ ...user, name: accountName });
+            setNote({ type: 'success', msg: 'Display name updated.' });
+            setNameDirty(false);
+        } catch {
+            setNote({ type: 'error', msg: 'Failed to update display name.' });
+        }
+    }
     const [note, setNote] = useState<{ type: 'success' | 'error' | 'info'; msg: string } | null>(null);
     const [purgeOpen, setPurgeOpen] = useState(false);
     const [purging, setPurging] = useState(false);
@@ -146,7 +163,17 @@ export default function InstructorSettings() {
                                     <CardContent>
                                         <Grid container spacing={2}>
                                             <Grid size={{ xs: 12, md: 6 }}>
-                                                <TextField label="Display name" value={accountName || ''} fullWidth variant='outlined' size='small' InputProps={{ readOnly: true }} />
+                                                <TextField
+                                                    label="Display name"
+                                                    value={accountName}
+                                                    onChange={(e) => { setAccountName(e.target.value); setNameDirty(true); }}
+                                                    onBlur={() => { if (nameDirty && accountName.trim()) saveAccountName(); }}
+                                                    helperText={nameDirty ? 'Press Save or blur to persist' : ' '}
+                                                    fullWidth
+                                                    variant='outlined'
+                                                    size='small'
+                                                    inputProps={{ maxLength: 60 }}
+                                                />
                                             </Grid>
                                             <Grid size={{ xs: 12, md: 6 }}>
                                                 <TextField label="Email" value={accountEmail || ''} fullWidth variant='outlined' size='small' InputProps={{ readOnly: true }} />
@@ -220,8 +247,11 @@ export default function InstructorSettings() {
                                             </Grid>
                                         </Grid>
                                     </CardContent>
-                                    <CardActions sx={{ justifyContent: 'flex-end' }}>
-                                        <Button startIcon={<SaveIcon />} variant="contained" onClick={save}>Save</Button>
+                                    <CardActions sx={{ justifyContent: 'flex-end', gap: 1 }}>
+                                        {nameDirty && (
+                                            <Button startIcon={<SaveIcon />} color='secondary' variant='outlined' onClick={saveAccountName} disabled={!accountName.trim()}>Save Name</Button>
+                                        )}
+                                        <Button startIcon={<SaveIcon />} variant="contained" onClick={save}>Save Course</Button>
                                     </CardActions>
                                 </Card>
                             </Grid>

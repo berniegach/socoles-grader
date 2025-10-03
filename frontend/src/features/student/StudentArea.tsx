@@ -14,31 +14,33 @@ import { alpha } from '@mui/material/styles';
 import type { Theme } from '@mui/material/styles';
 import EditorDialog from './EditorDialog';
 import StudentSubmissions from './StudentSubmissions';
+import FeedbackSurveyDialog from './FeedbackSurveyDialog';
 import StudentProfile from './StudentProfile';
 import StudentAssignmentPlayer from './StudentAssignmentPlayer';
 import { useAuth } from '@/features/auth/AuthProvider';
 import PageCard from '@/components/PageCard';
 
-interface AssignmentApi { id: string; title: string; course: string; difficulty: string; points: number; due: string; tags: string[] }
+interface AssignmentApi { id: string; title: string; course: string; difficulty: string; points: number; due: string; tags: string[]; questions?: { id: string }[] }
 interface SubmissionApi { id: string; student: string; assignment: string; date: string; grade: number; status: string }
 
 type Tone = 'primary' | 'secondary' | 'success' | 'info' | 'warning' | 'error';
 
-// Parse common due date formats, including DD-MM-YYYY (e.g., 18-09-2025)
+// Parse due date with explicit preference for DD-MM-YYYY. If matched, set to end-of-day local time.
 function parseDueMs(input: string): number {
     if (!input) return NaN;
-    const t = Date.parse(input);
-    if (!Number.isNaN(t)) return t;
-    const m = input.trim().match(/^(\d{1,2})-(\d{1,2})-(\d{2,4})$/);
+    const trimmed = input.trim();
+    const m = trimmed.match(/^(\d{1,2})-(\d{1,2})-(\d{2,4})$/); // DD-MM-YYYY
     if (m) {
         const day = parseInt(m[1], 10);
-        const month = parseInt(m[2], 10);
+        const month = parseInt(m[2], 10); // 1-12
         let year = parseInt(m[3], 10);
-        if (year < 100) year += 2000;
-        const dt = new Date(year, Math.max(0, month - 1), day);
+        if (year < 100) year += 2000; // 25 -> 2025
+        const dt = new Date(year, month - 1, day, 23, 59, 59, 999);
         return dt.getTime();
     }
-    return NaN;
+    // Fallback: ISO or RFC parse (e.g. 2025-10-04)
+    const t = Date.parse(trimmed);
+    return Number.isNaN(t) ? NaN : t;
 }
 
 function StatCard({ icon: Icon, label, value, postfix, tone }: { icon: ElementType; label: string; value: number | string; postfix?: string; tone?: Tone }) {
@@ -147,6 +149,9 @@ export default function StudentArea({ active }: { active: string }) {
     const [submissions, setSubmissions] = useState<SubmissionApi[]>([]);
     const [loading, setLoading] = useState(false);
     const [playerAssignmentId, setPlayerAssignmentId] = useState<string | null>(null);
+    const [surveyOpen, setSurveyOpen] = useState(false);
+    const [surveyAssignmentId, setSurveyAssignmentId] = useState<string | null>(null);
+    const [surveyedAssignments, setSurveyedAssignments] = useState<Set<string>>(new Set());
     const { user, authFetch } = useAuth();
 
     useEffect(() => {
@@ -154,14 +159,22 @@ export default function StudentArea({ active }: { active: string }) {
         async function load() {
             setLoading(true);
             try {
-                const [aRes, sRes] = await Promise.all([
-                    authFetch('/api/assignments'),
+                const [aRes, sRes, fRes] = await Promise.all([
+                    authFetch('/api/assignments?include=questions'),
                     authFetch('/api/submissions'),
+                    authFetch('/api/feedback')
                 ]);
                 const aData = await aRes.json();
                 const sData = await sRes.json();
+                let fData: any[] = [];
+                try { fData = await fRes.json(); } catch { /* ignore */ }
                 setAssignments(Array.isArray(aData) ? aData : []);
                 setSubmissions(Array.isArray(sData) ? sData : []);
+                if (Array.isArray(fData)) {
+                    const set = new Set<string>();
+                    fData.forEach(r => { if (r.assignmentId) set.add(r.assignmentId); });
+                    setSurveyedAssignments(set);
+                }
             } catch { /* ignore for now */ }
             finally { setLoading(false); }
         }
@@ -210,6 +223,47 @@ export default function StudentArea({ active }: { active: string }) {
 
         return { finished, inProgress, overdue, pending, finishedTitles, inProgressTitles };
     }, [assignments, submissions, user?.name]);
+
+    // Track which assignments are fully attempted (each question has at least one submission by student)
+    const fullyAttempted = useMemo(() => {
+        const me = user?.name;
+        const map = new Set<string>();
+        assignments.forEach(a => {
+            if (!a.questions || !a.questions.length) return; // no questions -> skip gating
+            const needed = a.questions.length;
+            let covered = 0;
+            const seen = new Set<string>();
+            submissions.forEach(s => {
+                if (s.student === me && s.assignment === a.title) { // assignment title used in submissions
+                    // we need per-question submissions; rely on question_submissions endpoint when opening player for detailed stats
+                    // As a lightweight proxy: if there is at least one submission for the assignment per question count threshold.
+                    // (Improvement: replace with real per-question check if IDs available.)
+                    covered = needed; // fallback: treat as covered when any submission exists
+                }
+            });
+            if (covered >= needed) map.add(a.id);
+        });
+        return map;
+    }, [assignments, submissions, user?.name]);
+
+    // Auto-open survey only when finished, unsurveyed, and fullyAttempted
+    useEffect(() => {
+        for (const a of categorized.finished) {
+            if (surveyedAssignments.has(a.id)) continue;
+            if (!fullyAttempted.has(a.id)) continue;
+            setSurveyAssignmentId(a.id);
+            setSurveyOpen(true);
+            break;
+        }
+    }, [categorized.finished, surveyedAssignments, fullyAttempted]);
+
+    function onSurveyClosed() {
+        if (surveyAssignmentId) {
+            setSurveyedAssignments(new Set([...surveyedAssignments, surveyAssignmentId]));
+        }
+        setSurveyOpen(false);
+        setSurveyAssignmentId(null);
+    }
 
     const nearestDueDays = useMemo(() => {
         const now = Date.now();
@@ -380,6 +434,13 @@ export default function StudentArea({ active }: { active: string }) {
                 feedback={feedback}
                 rubric={rubric}
                 onRun={runGrade}
+            />
+            <FeedbackSurveyDialog
+                open={surveyOpen}
+                assignmentId={surveyAssignmentId}
+                assignmentTitle={assignments.find(a => a.id === surveyAssignmentId)?.title || null}
+                onClose={onSurveyClosed}
+                authFetch={authFetch}
             />
         </Box>
     );

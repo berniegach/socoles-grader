@@ -33,6 +33,7 @@ export default function SubmissionReview() {
     // per-question attempt history state
     const [historyByQId, setHistoryByQId] = useState<Record<string, { open: boolean; loading: boolean; attempts: QuestionSubmissionAttempt[]; error?: string }>>({});
     const [search, setSearch] = useState('');
+    const [chartsAdvancedOpen, setChartsAdvancedOpen] = useState(false);
 
     // Helper to format grades consistently
     const formatGrade = (g: number | null | undefined) => (typeof g === 'number' && isFinite(g) ? g.toFixed(2) : '—');
@@ -165,7 +166,7 @@ export default function SubmissionReview() {
                                 md: 'repeat(3, 1fr)',
                                 lg: 'repeat(4, 1fr)'
                             }
-                        }}>
+                        }}> 
                             {filteredAssignments.map(a => (
                                 <Card key={a.id} variant='outlined' sx={{ display: 'flex', flexDirection: 'column' }}>
                                     <CardActionArea onClick={() => setSelectedAssignment(a)} sx={{ alignSelf: 'stretch' }}>
@@ -209,73 +210,75 @@ export default function SubmissionReview() {
                                     <ResultsCharts
                                         results={rows.map(r => ({ Grade: (r as any).grade ?? 0 }))}
                                         loadAttemptsFor={selectedAssignment ? { assignmentId: selectedAssignment.id, student: (rows[0]?.student || ''), token: user?.token } : undefined}
+                                        onAdvancedChange={(o) => setChartsAdvancedOpen(o)}
                                     />
                                 </Box>
-                                <Divider sx={{ my: 2 }} />
-                                <Table size="small">
-                                    <TableHead>
-                                        <TableRow>
-                                            <TableCell>Student</TableCell>
-                                            <TableCell>Date</TableCell>
-                                            <TableCell>Grade</TableCell>
-                                            <TableCell>Status</TableCell>
-                                            <TableCell>Actions</TableCell>
-                                        </TableRow>
-                                    </TableHead>
-                                    <TableBody>
-                                        {rows.map((s: SubmissionWithQuestions) => (
-                                            <TableRow key={s.id} hover sx={{ cursor: 'pointer' }} onClick={() => {
-                                                setSelectedSubmissionId(s.id);
-                                                if (!(s as any).questions) void loadQuestions(s.id);
-                                            }}>
-                                                <TableCell>{rosterMap[s.student] || s.student}</TableCell>
-                                                <TableCell>{formatDateTimeDDMMYYYYHHmm(s.date)}</TableCell>
-                                                <TableCell>{formatGrade((s as any).grade)}</TableCell>
-                                                <TableCell>{s.status}</TableCell>
-                                                <TableCell>
-                                                    <Button size='small' sx={{ ml: 0 }} variant='contained' disabled={gradingSub[s.id]?.status === 'loading'} onClick={async (e) => {
-                                                        e.stopPropagation();
-                                                        setGradingSub(m => ({ ...m, [s.id]: { status: 'loading', message: 'Starting grader…' } }));
-                                                        try {
-                                                            const start = await authFetch('/api/grade-submission', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ submissionId: s.id, async: true }) });
-                                                            if (!start.ok) throw new Error('Failed to start grading');
-                                                            const started = await start.json();
-                                                            const jobId: string | undefined = started?.jobId;
-                                                            if (!jobId) throw new Error('No job id');
-                                                            const deadline = Date.now() + 120_000;
-                                                            let final: any = null;
-                                                            while (Date.now() < deadline) {
-                                                                await new Promise(r => setTimeout(r, 1000));
-                                                                const poll = await authFetch(`/api/grade-submission?job=${encodeURIComponent(jobId)}`);
-                                                                if (!poll.ok) continue;
-                                                                const body = await poll.json();
-                                                                if (body.status === 'succeeded') { final = body.result; break; }
-                                                                if (body.status === 'failed') { throw new Error(body.error || 'Grading failed'); }
-                                                                setGradingSub(m => ({ ...m, [s.id]: { status: 'loading', message: 'Grading in progress…' } }));
-                                                            }
-                                                            if (!final) {
-                                                                setGradingSub(m => ({ ...m, [s.id]: { status: 'success', message: 'Still processing in background…' } }));
-                                                                return;
-                                                            }
-                                                            setRows(r => r.map(row => row.id === s.id ? { ...row, grade: (final as any)?.submission?.grade, status: (final as any)?.status || (row as any).status } as any : row));
-                                                            await loadQuestions(s.id);
-                                                            setGradingSub(m => ({ ...m, [s.id]: { status: 'success', message: (final as any)?.status === 'Needs review' ? 'Completed with issues.' : 'Auto-grading complete.' } }));
-                                                        } catch (e: any) {
-                                                            setGradingSub(m => ({ ...m, [s.id]: { status: 'error', message: e?.message || 'Failed' } }));
-                                                        }
-                                                    }}>Auto-Grade</Button>
-                                                    {gradingSub[s.id]?.status !== 'idle' && <Typography variant='caption' color={gradingSub[s.id]?.status === 'error' ? 'error' : 'text.secondary'} sx={{ ml: 1 }}>{gradingSub[s.id]?.message}</Typography>}
-                                                </TableCell>
+                                {!chartsAdvancedOpen && <Divider sx={{ my: 2 }} />}
+                                {!chartsAdvancedOpen && (
+                                    <Table size="small">
+                                        <TableHead>
+                                            <TableRow>
+                                                <TableCell>Student</TableCell>
+                                                <TableCell>Date</TableCell>
+                                                <TableCell>Grade</TableCell>
+                                                <TableCell>Status</TableCell>
+                                                <TableCell>Actions</TableCell>
                                             </TableRow>
-                                        ))}
-                                        {!rows.length && !loading && (
-                                            <TableRow><TableCell colSpan={5}>No submissions for this quiz.</TableCell></TableRow>
-                                        )}
-                                        {loading && (
-                                            <TableRow><TableCell colSpan={5}>Loading…</TableCell></TableRow>
-                                        )}
-                                    </TableBody>
-                                </Table>
+                                        </TableHead>
+                                        <TableBody>
+                                            {rows.map((s: SubmissionWithQuestions) => (
+                                                <TableRow key={s.id} hover sx={{ cursor: 'pointer' }} onClick={() => {
+                                                    setSelectedSubmissionId(s.id);
+                                                    if (!(s as any).questions) void loadQuestions(s.id);
+                                                }}>
+                                                    <TableCell>{rosterMap[s.student] || s.student}</TableCell>
+                                                    <TableCell>{formatDateTimeDDMMYYYYHHmm(s.date)}</TableCell>
+                                                    <TableCell>{formatGrade((s as any).grade)}</TableCell>
+                                                    <TableCell>{s.status}</TableCell>
+                                                    <TableCell>
+                                                        <Button size='small' sx={{ ml: 0 }} variant='contained' disabled={gradingSub[s.id]?.status === 'loading'} onClick={async (e) => {
+                                                            e.stopPropagation();
+                                                            setGradingSub(m => ({ ...m, [s.id]: { status: 'loading', message: 'Starting grader…' } }));
+                                                            try {
+                                                                const start = await authFetch('/api/grade-submission', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ submissionId: s.id, async: true }) });
+                                                                if (!start.ok) throw new Error('Failed to start grading');
+                                                                const started = await start.json();
+                                                                const jobId: string | undefined = started?.jobId;
+                                                                if (!jobId) throw new Error('No job id');
+                                                                const deadline = Date.now() + 120_000;
+                                                                let final: any = null;
+                                                                while (Date.now() < deadline) {
+                                                                    await new Promise(r => setTimeout(r, 1000));
+                                                                    const poll = await authFetch(`/api/grade-submission?job=${encodeURIComponent(jobId)}`);
+                                                                    if (!poll.ok) continue;
+                                                                    const body = await poll.json();
+                                                                    if (body.status === 'succeeded') { final = body.result; break; }
+                                                                    if (body.status === 'failed') { throw new Error(body.error || 'Grading failed'); }
+                                                                    setGradingSub(m => ({ ...m, [s.id]: { status: 'loading', message: 'Grading in progress…' } }));
+                                                                }
+                                                                if (!final) {
+                                                                    setGradingSub(m => ({ ...m, [s.id]: { status: 'success', message: 'Still processing in background…' } }));
+                                                                    return;
+                                                                }
+                                                                setRows(r => r.map(row => row.id === s.id ? { ...row, grade: (final as any)?.submission?.grade, status: (final as any)?.status || (row as any).status } as any : row));
+                                                                await loadQuestions(s.id);
+                                                                setGradingSub(m => ({ ...m, [s.id]: { status: 'success', message: (final as any)?.status === 'Needs review' ? 'Completed with issues.' : 'Auto-grading complete.' } }));
+                                                            } catch (e: any) {
+                                                                setGradingSub(m => ({ ...m, [s.id]: { status: 'error', message: e?.message || 'Failed' } }));
+                                                            }
+                                                        }}>Auto-Grade</Button>
+                                                        {gradingSub[s.id]?.status !== 'idle' && <Typography variant='caption' color={gradingSub[s.id]?.status === 'error' ? 'error' : 'text.secondary'} sx={{ ml: 1 }}>{gradingSub[s.id]?.message}</Typography>}
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))}
+                                            {!rows.length && !loading && (
+                                                <TableRow><TableCell colSpan={5}>No submissions for this quiz.</TableCell></TableRow>
+                                            )}
+                                            {loading && (
+                                                <TableRow><TableCell colSpan={5}>Loading…</TableCell></TableRow>
+                                            )}
+                                        </TableBody>
+                                    </Table>)}
                             </>
                         )}
                         {selectedSubmissionId && (() => {

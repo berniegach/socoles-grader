@@ -79,15 +79,17 @@ export default function AppShell() {
         }
     }, [role]);
 
+    const handleSignOut = () => { try { localStorage.removeItem('sqlgrader.instructor'); localStorage.removeItem('sqlgrader.student'); } catch { } setUser(null); };
+
     return (
         <Box sx={{ display: 'flex', minHeight: '100vh' }}>
-            <AppBar position="fixed" sx={{ zIndex: (t) => t.zIndex.drawer + 1 }}>
-                <Toolbar sx={{ gap: 2 }}>
-                    <Box component="img" src="/icons/student.gif" alt="Student" sx={{ height: 40, width: 'auto', display: 'block', borderRadius: 1 }} />
-                    <Typography variant="h6" sx={{ flexGrow: 1 }}>
-                        Welcome back, {displayName || user?.name?.split('@')[0] || 'friend'}!
+            <AppBar position="fixed" sx={{ zIndex: (t) => t.zIndex.drawer + 1, background: 'linear-gradient(90deg,#ff66c4,#ffde59)', boxShadow: '0 2px 6px rgba(0,0,0,0.25)' }}>
+                <Toolbar sx={{ gap: 2, minHeight: 60 }}>
+                    <Box component="img" src="/icons/student.gif" alt="Student" sx={{ height: 40, width: 'auto', display: 'block', borderRadius: 1, boxShadow: '0 0 0 2px rgba(255,255,255,0.25)' }} />
+                    <Typography variant="h6" sx={{ flexGrow: 1, fontWeight: 600, letterSpacing: 0.25 }}>
+                        {displayName || user?.name?.split('@')[0] || 'Welcome'}
                     </Typography>
-                    <IconButton color="inherit" onClick={() => { try { localStorage.removeItem('sqlgrader.instructor'); localStorage.removeItem('sqlgrader.student'); } catch { } setUser(null); }} title="Sign out">
+                    <IconButton color="inherit" onClick={handleSignOut} title="Sign out" sx={{ bgcolor: 'rgba(0,0,0,0.15)', '&:hover': { bgcolor: 'rgba(0,0,0,0.25)' } }}>
                         <LogoutIcon />
                     </IconButton>
                 </Toolbar>
@@ -106,24 +108,56 @@ export default function AppShell() {
                     </Box>
                 </Box>
                 <Divider />
-                <List>
-                    {items.map((it) => (
-                        <ListItemButton key={it.id} selected={active === it.id} onClick={() => { setActive(it.id); sessionStorage.setItem('appshell.active', it.id); }}>
-                            <ListItemIcon>
-                                <it.icon color="secondary" />
-                            </ListItemIcon>
-                            <ListItemText primary={it.label} />
-                        </ListItemButton>
-                    ))}
+                <List sx={{ mt: 1 }}>
+                    {items.map((it) => {
+                        const isActive = active === it.id;
+                        return (
+                            <ListItemButton
+                                key={it.id}
+                                aria-current={isActive ? 'page' : undefined}
+                                onClick={() => { setActive(it.id); sessionStorage.setItem('appshell.active', it.id); }}
+                                sx={(theme) => ({
+                                    position: 'relative',
+                                    borderRadius: 1,
+                                    mx: 1,
+                                    my: 0.25,
+                                    pl: 1.5,
+                                    alignItems: 'center',
+                                    gap: 0.5,
+                                    overflow: 'hidden',
+                                    transition: 'background .2s, transform .15s',
+                                    ...(isActive && {
+                                        background: 'linear-gradient(90deg, rgba(255,102,196,0.16), rgba(255,222,89,0.16))'
+                                    }),
+                                    '&:hover': {
+                                        background: isActive
+                                            ? 'linear-gradient(90deg, rgba(255,102,196,0.25), rgba(255,222,89,0.25))'
+                                            : 'rgba(255,255,255,0.06)'
+                                    },
+                                    '&:before': isActive ? {
+                                        content: '""',
+                                        position: 'absolute',
+                                        left: 0,
+                                        top: 4,
+                                        bottom: 4,
+                                        width: 4,
+                                        borderRadius: 2,
+                                        background: 'linear-gradient(180deg,#ff66c4,#ffde59)'
+                                    } : undefined
+                                })}
+                            >
+                                <ListItemIcon sx={{ minWidth: 40, color: isActive ? 'secondary.main' : 'text.secondary' }}>
+                                    <it.icon fontSize='small' />
+                                </ListItemIcon>
+                                <ListItemText primaryTypographyProps={{ fontWeight: isActive ? 600 : 500 }} primary={it.label} />
+                            </ListItemButton>
+                        );
+                    })}
                 </List>
-                <Box sx={{ mt: 'auto', p: 2, display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                    <Avatar
-                        src={role === 'student' ? '/icons/reading-book.png' : '/icons/teacher.png'}
-                        alt={role === 'student' ? 'Student' : 'Instructor'}
-                        sx={{ width: 36, height: 36, bgcolor: 'secondary.main' }}
-                    />
-                    <Box>
-                        <Typography variant="body2" noWrap sx={{ maxWidth: 140 }}>{user?.name}</Typography>
+                <Box sx={{ mt: 'auto', p: 2, display: 'flex', alignItems: 'center', gap: 1.25, opacity: 0.9 }}>
+                    <Avatar src={role === 'student' ? '/icons/reading-book.png' : '/icons/teacher.png'} alt={role === 'student' ? 'Student' : 'Instructor'} sx={{ width: 36, height: 36, bgcolor: 'secondary.main' }} />
+                    <Box sx={{ minWidth: 0 }}>
+                        <Typography variant="body2" noWrap sx={{ maxWidth: 140, fontWeight: 600 }}>{user?.name}</Typography>
                         <Typography variant="caption" color="text.secondary">{role}</Typography>
                     </Box>
                 </Box>

@@ -1,6 +1,6 @@
 'use client';
 import React from 'react';
-import { Box, Card, CardContent, CardHeader, Typography, Table, TableBody, TableCell, TableHead, TableRow, Button, Tooltip, Divider } from '@mui/material';
+import { Box, Card, CardContent, CardHeader, Typography, Table, TableBody, TableCell, TableHead, TableRow, Button, Tooltip, Divider, Switch, FormControlLabel } from '@mui/material';
 import { BarChart } from '@mui/x-charts/BarChart';
 import { PieChart } from '@mui/x-charts/PieChart';
 import { LineChart } from '@mui/x-charts/LineChart';
@@ -13,10 +13,11 @@ import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 import { useTheme } from '@mui/material/styles';
 
-interface ResultsChartsProps { results?: any[]; loadAttemptsFor?: { assignmentId: string; student: string; token?: string }; }
-export default function ResultsCharts({ results = [] as any[], loadAttemptsFor }: ResultsChartsProps) {
+interface ResultsChartsProps { results?: any[]; loadAttemptsFor?: { assignmentId: string; student: string; token?: string }; onAdvancedChange?: (open: boolean) => void; }
+export default function ResultsCharts({ results = [] as any[], loadAttemptsFor, onAdvancedChange }: ResultsChartsProps) {
     const theme = useTheme();
     const [showAdvanced, setShowAdvanced] = React.useState(false);
+    const toggleAdvanced = (val: boolean) => { setShowAdvanced(val); try { onAdvancedChange?.(val); } catch { /* ignore */ } };
     const [attemptAugmented, setAttemptAugmented] = React.useState<any[] | null>(null);
     const [loadingAttempts, setLoadingAttempts] = React.useState(false);
 
@@ -227,8 +228,8 @@ export default function ResultsCharts({ results = [] as any[], loadAttemptsFor }
         return (
             <Box sx={{ display: 'grid', gap: 2 }}>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Typography variant='h6'>Advanced Progress Charts</Typography>
-                    <Button size='small' onClick={() => setShowAdvanced(false)}>Back</Button>
+                    <Typography variant='h6'>Attempt Progress Analytics</Typography>
+                    <Button size='small' onClick={() => toggleAdvanced(false)}>Back</Button>
                 </Box>
                 {loadingAttempts && <Typography variant='caption' color='text.secondary'>Loading attempts…</Typography>}
                 <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', lg: '1fr 1fr' } }}>
@@ -305,6 +306,8 @@ export default function ResultsCharts({ results = [] as any[], loadAttemptsFor }
                         </CardContent>
                     </Card>
                 </Box>
+                {/* Instructor Survey Analytics moved below other charts */}
+                <InstructorSurveyAnalytics assignmentId={loadAttemptsFor?.assignmentId} />
             </Box>
         );
     }
@@ -394,6 +397,12 @@ export default function ResultsCharts({ results = [] as any[], loadAttemptsFor }
                 </Card>
             </Box>
 
+            <Box>
+                <Tooltip title='Explore detailed progress & rubric evolution'>
+                    <Button variant='outlined' onClick={() => toggleAdvanced(true)}>More Charts</Button>
+                </Tooltip>
+            </Box>
+
             {/* Common Incorrect Answers */}
             <Card>
                 <CardHeader title="Common Incorrect Answers" />
@@ -421,12 +430,102 @@ export default function ResultsCharts({ results = [] as any[], loadAttemptsFor }
                 </CardContent>
             </Card>
 
-            <Box>
-                <Divider sx={{ my: 1 }} />
-                <Tooltip title='Explore detailed progress & rubric evolution'>
-                    <Button variant='outlined' onClick={() => setShowAdvanced(true)}>More Charts</Button>
-                </Tooltip>
+
+        </Box>
+    );
+}
+
+// Lightweight component to load & present instructor feedback survey analytics inside advanced section
+interface InstructorSurveyAnalyticsProps { assignmentId?: string }
+function InstructorSurveyAnalytics({ assignmentId }: InstructorSurveyAnalyticsProps) {
+    const [data, setData] = React.useState<any | null>(null);
+    const [loading, setLoading] = React.useState(false);
+    const [error, setError] = React.useState<string | null>(null);
+    // Lazy import to avoid circular if AuthProvider changes
+    const auth = (typeof window !== 'undefined') ? (window as any).__AUTH : null;
+    const token: string | undefined = auth?.user?.token;
+    const [showAll, setShowAll] = React.useState(false);
+    React.useEffect(() => {
+        let cancelled = false;
+        async function load() {
+            setLoading(true); setError(null);
+            try {
+                const headers: Record<string, string> = {};
+                if (token) headers['Authorization'] = `Bearer ${token}`;
+                const url = showAll ? '/api/feedback?aggregate=1' : (assignmentId ? `/api/feedback?aggregate=1&assignmentId=${encodeURIComponent(assignmentId)}` : '/api/feedback?aggregate=1');
+                const res = await fetch(url, { headers });
+                if (res.status === 401) { setError('Unauthorized'); return; }
+                if (!res.ok) throw new Error('fetch failed');
+                const json = await res.json();
+                if (!cancelled) setData(json);
+            } catch (e: any) {
+                if (!cancelled) setError(e.message || 'error');
+            } finally { if (!cancelled) setLoading(false); }
+        }
+        load();
+        return () => { cancelled = true; };
+    }, [token, assignmentId, showAll]);
+    if (loading) return <Typography variant='caption' color='text.secondary'>Loading survey analytics…</Typography>;
+    if (error) return <Typography variant='caption' color='error'>Survey analytics unavailable: {error}</Typography>;
+    if (!data || !data.total_responses) return <Typography variant='caption' color='text.secondary'>No survey responses yet.</Typography>;
+    // Prepare distributions for charts
+    const helpedRaw = (data.helped_fix_distribution || []).map((d: any) => ({ rating: d.helped_fix as number, n: d.n as number }));
+    const understandingRaw = (data.improved_understanding_distribution || []).map((d: any) => ({ rating: d.improved_understanding as number, n: d.n as number }));
+    // High-contrast distinct colors (blue, orange, green, purple, red) chosen for differentiation & color-blind friendliness
+    const surveyColors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#9467bd', '#d62728'];
+    // Convert into single-row dataset with columns value1..value5 so each bar becomes its own series (allowing distinct colors)
+    function toSeriesDataset(rows: { rating: number; n: number }[]) {
+        const base: any = { bucket: 'ratings' };
+        rows.forEach(r => { base['v' + r.rating] = r.n; });
+        return [base];
+    }
+    const helpedDataset = toSeriesDataset(helpedRaw);
+    const understandingDataset = toSeriesDataset(understandingRaw);
+    const helpedSeries = helpedRaw.map((r: { rating: number; n: number }) => ({ dataKey: 'v' + r.rating, label: String(r.rating), color: surveyColors[(r.rating - 1) % surveyColors.length] }));
+    const understandingSeries = understandingRaw.map((r: { rating: number; n: number }) => ({ dataKey: 'v' + r.rating, label: String(r.rating), color: surveyColors[(r.rating - 1) % surveyColors.length] }));
+    return (
+        <Box sx={{ display: 'grid', gap: 2 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <Typography variant='h6'>Survey Analytics</Typography>
+                <FormControlLabel
+                    control={<Switch size='small' checked={showAll} onChange={(_, v) => setShowAll(v)} />}
+                    label={<Typography variant='caption' color='text.secondary'>{showAll ? 'All assignments' : 'Current assignment'}</Typography>}
+                />
             </Box>
+            <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', sm: 'repeat(3, 1fr)', md: 'repeat(6, 1fr)' } }}>
+                <Card><CardContent><Typography variant='h6'>{data.total_responses}</Typography><Typography variant='caption' color='text.secondary'>Responses</Typography></CardContent></Card>
+                <Card><CardContent><Typography variant='h6'>{data.avg_helped_fix ?? '–'}</Typography><Typography variant='caption' color='text.secondary'>Avg Helped Fix</Typography></CardContent></Card>
+                <Card><CardContent><Typography variant='h6'>{data.avg_improved_understanding ?? '–'}</Typography><Typography variant='caption' color='text.secondary'>Avg Understanding</Typography></CardContent></Card>
+                <Card><CardContent><Typography variant='h6'>{data.avg_improvement ?? '–'}</Typography><Typography variant='caption' color='text.secondary'>Avg Improvement</Typography></CardContent></Card>
+                <Card><CardContent><Typography variant='h6'>{data.percent_improved != null ? data.percent_improved + '%' : '–'}</Typography><Typography variant='caption' color='text.secondary'>% Improved</Typography></CardContent></Card>
+                <Card><CardContent><Typography variant='h6'>{data.median_improvement ?? '–'}</Typography><Typography variant='caption' color='text.secondary'>Median Δ</Typography></CardContent></Card>
+            </Box>
+            <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' } }}>
+                <Card>
+                    <CardHeader title={<Typography variant='subtitle2'>Helped Fix Distribution</Typography>} />
+                    <CardContent>
+                        {helpedDataset[0] && helpedSeries.length ? <BarChart height={200} dataset={helpedDataset} xAxis={[{ dataKey: 'bucket', scaleType: 'band', label: 'Helped Fix (1-5)', categoryGapRatio: 0.4 }]} series={helpedSeries} /> : <Typography variant='caption' color='text.secondary'>No data</Typography>}
+                    </CardContent>
+                </Card>
+                <Card>
+                    <CardHeader title={<Typography variant='subtitle2'>Understanding Distribution</Typography>} />
+                    <CardContent>
+                        {understandingDataset[0] && understandingSeries.length ? <BarChart height={200} dataset={understandingDataset} xAxis={[{ dataKey: 'bucket', scaleType: 'band', label: 'Understanding (1-5)', categoryGapRatio: 0.4 }]} series={understandingSeries} /> : <Typography variant='caption' color='text.secondary'>No data</Typography>}
+                    </CardContent>
+                </Card>
+            </Box>
+            <Card>
+                <CardHeader title={<Typography variant='subtitle2'>Correlations</Typography>} subheader={<Typography variant='caption'>Improvement vs Ratings (Pearson)</Typography>} />
+                <CardContent>
+                    <Table size='small'>
+                        <TableHead><TableRow><TableCell>Metric</TableCell><TableCell>r</TableCell></TableRow></TableHead>
+                        <TableBody>
+                            <TableRow><TableCell>Improvement ~ Helped Fix</TableCell><TableCell>{data.correlation?.improvement_helped_fix ?? 'n/a'}</TableCell></TableRow>
+                            <TableRow><TableCell>Improvement ~ Understanding</TableCell><TableCell>{data.correlation?.improvement_understanding ?? 'n/a'}</TableCell></TableRow>
+                        </TableBody>
+                    </Table>
+                </CardContent>
+            </Card>
         </Box>
     );
 }

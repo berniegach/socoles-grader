@@ -176,6 +176,23 @@ export async function initSchema() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );`);
 
+  // Post-quiz micro-survey (one row per student per assignment)
+  await query(`CREATE TABLE IF NOT EXISTS assignment_feedback_survey (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      assignment_id UUID REFERENCES assignments(id) ON DELETE CASCADE,
+      student TEXT NOT NULL,
+      owner_id UUID REFERENCES instructors(id) ON DELETE CASCADE,
+      helped_fix INT NOT NULL CHECK (helped_fix BETWEEN 1 AND 5),
+      improved_understanding INT NOT NULL CHECK (improved_understanding BETWEEN 1 AND 5),
+      comment TEXT NULL,
+      first_score NUMERIC NULL,
+      final_score NUMERIC NULL,
+      attempt_count INT NULL,
+      improvement NUMERIC NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      UNIQUE(assignment_id, student, owner_id)
+    );`);
+
   // Instructor must be created via signup
   const defaultInstructorId: string | null = null;
 
