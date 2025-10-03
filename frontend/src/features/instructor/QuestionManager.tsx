@@ -33,6 +33,8 @@ import {
     Switch,
     FormControlLabel,
 } from '@mui/material';
+import HeaderActionButton from '@/components/HeaderActionButton';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import EditIcon from '@mui/icons-material/Edit';
 import TaskAltIcon from '@mui/icons-material/TaskAlt';
@@ -42,7 +44,7 @@ import SaveIcon from '@mui/icons-material/Save';
 import CancelIcon from '@mui/icons-material/Close';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import DoneIcon from '@mui/icons-material/Done';
-import MoreVertIcon from '@mui/icons-material/MoreVert';
+// moved per-question actions menu trigger into QuestionCard component
 import AddIcon from '@mui/icons-material/Add';
 import type { Question, NewQuestionPayload } from '@/lib/types';
 import type { Assignment } from '@/lib/types';
@@ -51,6 +53,7 @@ import type { GradingOptions as GradingOptionsType } from '@/lib/types';
 import GradingOptions from '@/features/instructor/GradingOptions';
 import { useTheme, alpha } from '@mui/material/styles';
 import PageCard from '@/components/PageCard';
+import QuestionCard from '@/components/QuestionCard';
 import RichTextEditor from '@/components/RichTextEditor';
 import DOMPurify from 'dompurify';
 import SafeRichText from '@/components/SafeRichText';
@@ -78,55 +81,25 @@ function BankTable({ rows = [] as Question[], loading, onEdit, selectedId, onSel
             )}
             <Box sx={{
                 display: 'grid',
-                gap: 1,
+                gap: 1.25,
                 gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr', md: 'repeat(2, 1fr)' },
                 opacity: loading ? 0.5 : 1,
             }}>
-                {safeRows.map((q) => {
-                    const isSel = selectedId === q.id;
-                    return (
-                        <Box
-                            key={q.id}
-                            onClick={() => onSelect && onSelect(q.id)}
-                            sx={{
-                                p: 1,
-                                border: '1px solid',
-                                borderColor: isSel ? 'primary.main' : 'divider',
-                                borderRadius: 1,
-                                bgcolor: isSel ? 'action.hover' : 'transparent',
-                                cursor: 'pointer',
-                                display: 'grid',
-                                gap: 0.75,
-                            }}
-                        >
-                            <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1 }}>
-                                <Typography variant='subtitle2' sx={{ fontWeight: 600, lineHeight: 1.2 }}>{q.title || 'Untitled'}</Typography>
-                                <Tooltip title='Actions'>
-                                    <IconButton size='small' onClick={(e) => handleOpen(e, q.id)}>
-                                        <MoreVertIcon fontSize='small' />
-                                    </IconButton>
-                                </Tooltip>
-                            </Box>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
-                                <Chip label={q.difficulty} size='small' variant='outlined' />
-                                {q.status === 'Published' ? (
-                                    <Chip label={q.status} size='small' color='primary' variant='outlined' />
-                                ) : (
-                                    <Chip label={q.status} size='small' variant='filled' />
-                                )}
-                                <Chip label={`${q.maxPoints} pts`} size='small' />
-                                {q.useDefaultGrading === false ? (
-                                    <Chip label='Custom' size='small' color='secondary' variant='outlined' />
-                                ) : (
-                                    <Chip label='Default' size='small' variant='outlined' />
-                                )}
-                                <Tooltip title='Unique students who achieved full credit (or auto-graded credit) for this question'>
-                                    <Chip label={`Attempts: ${q.attempts}`} size='small' variant='outlined' />
-                                </Tooltip>
-                            </Box>
-                        </Box>
-                    );
-                })}
+                {safeRows.map(q => (
+                    <QuestionCard
+                        key={q.id}
+                        id={q.id}
+                        title={q.title || 'Untitled'}
+                        difficulty={q.difficulty || 'Intermediate'}
+                        status={q.status || 'Draft'}
+                        maxPoints={q.maxPoints || 0}
+                        attempts={q.attempts || 0}
+                        useDefaultGrading={q.useDefaultGrading}
+                        selected={selectedId === q.id}
+                        onSelect={onSelect}
+                        onMenu={handleOpen}
+                    />
+                ))}
             </Box>
             <Menu
                 anchorEl={menuAnchor}
@@ -299,7 +272,6 @@ export default function QuestionManager() {
         } catch { setPreviewData(null); } finally { setPreviewLoading(false); }
     }
 
-    function normSQL(v: string) { return (v || '').replace(/--.*$/gm, '').replace(/\s+/g, ' ').trim().toLowerCase(); }
     async function runPreviewGrade() {
         if (!studentSql.trim() || grading || attemptsLeft <= 0) return;
         const q = previewData || { modelSql, modelQueries, maxPoints, initSql } as Pick<Question, 'modelSql' | 'modelQueries' | 'maxPoints' | 'initSql'>;
@@ -391,42 +363,6 @@ export default function QuestionManager() {
     }
 
     // Helper: extract schema from init SQL for preview (PK underlined)
-    function extractSchema(sql: string): Array<{ name: string; columns: Array<{ name: string; pk: boolean }> }> {
-        try {
-            const cleaned = (sql || '')
-                .replace(/--.*$/gm, '')
-                .replace(/\/\*[\s\S]*?\*\//g, '');
-            const out: Array<{ name: string; columns: Array<{ name: string; pk: boolean }> }> = [];
-            const re = /create\s+table\s+(["`\[]?[\w.]+["`\]]?)\s*\(([^;]*)\)/gi;
-            let m: RegExpExecArray | null;
-            while ((m = re.exec(cleaned)) !== null) {
-                const rawName = (m[1] || '').trim();
-                const name = rawName.replace(/["`\[\]]/g, '');
-                const body = (m[2] || '').trim();
-                const parts = body.split(/,(?![^()]*\))/).map(s => s.trim()).filter(Boolean);
-                const pkSet = new Set<string>();
-                for (const line of parts) {
-                    const l = line.replace(/\s+/g, ' ').trim();
-                    const pkMatch = l.match(/^(?:constraint\s+\S+\s+)?primary\s+key\s*\(([^)]+)\)/i);
-                    if (pkMatch) {
-                        pkMatch[1].split(',').map(s => s.trim().replace(/["`\[\]]/g, '').toLowerCase()).forEach(c => pkSet.add(c));
-                    }
-                }
-                const colDefs: Array<{ name: string; pk: boolean }> = [];
-                for (const line of parts) {
-                    const l = line.replace(/\s+/g, ' ').trim();
-                    if (/^(constraint|primary|foreign|unique|check|key|references)\b/i.test(l)) continue;
-                    const colNameRaw = l.split(' ')[0] || '';
-                    const colName = colNameRaw.replace(/["`\[\]]/g, '');
-                    const isInlinePk = /\bprimary\s+key\b/i.test(l);
-                    const isPk = isInlinePk || pkSet.has(colName.toLowerCase());
-                    colDefs.push({ name: colName, pk: !!isPk });
-                }
-                out.push({ name, columns: colDefs });
-            }
-            return out;
-        } catch { return []; }
-    }
 
     async function loadQuestions() {
         if (!user?.token) return; // wait for auth
@@ -566,15 +502,6 @@ export default function QuestionManager() {
     }
     function removeModelQuery(idx: number) { setModelQueries(list => list.filter((_, i) => i !== idx)); }
 
-    async function loadAssignmentsForChooser() {
-        setAssignmentsLoading(true); setAssignmentsError(null);
-        try {
-            const res = await authFetch('/api/assignments');
-            if (!res.ok) throw new Error(`Failed (${res.status})`);
-            const data = await res.json();
-            setAssignmentsList(Array.isArray(data) ? data : []);
-        } catch (e: any) { setAssignmentsError(e.message || 'Failed to load assignments'); } finally { setAssignmentsLoading(false); }
-    }
     // determine which assignments already contain the target question
     async function refreshAlreadyLinked(questionId: string, assignmentsOverride?: Assignment[]) {
         const list = assignmentsOverride ?? assignmentsList;
@@ -693,154 +620,153 @@ export default function QuestionManager() {
         return <Typography variant='body2' color='text.secondary'>Initializing authentication…</Typography>;
     }
 
+    const headerActions = (
+        <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'nowrap' }}>
+            {view === 'list' && (
+                <>
+                    <HeaderActionButton onClick={openPreview} disabled={!selectedId} aria-label='Preview question' title='Preview question' startIcon={<VisibilityIcon fontSize='small' />}>Preview</HeaderActionButton>
+                    <HeaderActionButton onClick={startCreate} aria-label='Add question' title='Add question'>
+                        <AddIcon fontSize='small' />
+                    </HeaderActionButton>
+                </>
+            )}
+            {view === 'editor' && (
+                <>
+                    <HeaderActionButton onClick={() => { setView('list'); }} aria-label='Back to list' title='Back to list'>
+                        <ArrowBackIcon fontSize='small' />
+                    </HeaderActionButton>
+                    <HeaderActionButton onClick={resetForm}>New</HeaderActionButton>
+                </>
+            )}
+        </Box>
+    );
+
     return (
-        <PageCard noPadding>
+        <PageCard headerTitle={view === 'editor' ? (editingId ? 'Edit Question' : 'Create Question') : 'Questions'} headerProps={{ height: 56 }} headerActions={headerActions} headerActionsVariant='plain'>
             <Box sx={{ display: 'grid', gap: 2, p: { xs: 2, md: 3 } }}>
                 {view === 'editor' && (
-                    <Card>
-                        <CardHeader
-                            sx={{ pb: 1 }}
-                            title={<Typography variant="subtitle1" fontWeight={600}>{editingId ? 'Edit Question' : 'Create Question'}</Typography>}
-                            action={<Box sx={{ display: 'flex', gap: 1 }}>
-                                <Button variant='outlined' size='small' onClick={() => setView('list')}>Back to bank</Button>
-                                <Button startIcon={<AddIcon />} variant="contained" size="small" onClick={resetForm}>New</Button>
-                            </Box>}
-                        />
-                        <CardContent sx={{ pt: 0 }}>
-                            <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { md: 'repeat(2,1fr)', xs: '1fr' } }}>
-                                <Box>
-                                    <TextField label="Title" placeholder="Find authors with > 3 books" variant="outlined" fullWidth value={title} onChange={(e) => setTitle(e.target.value)} />
-                                </Box>
-                                <Box>
-                                    <TextField label="Difficulty" value={difficulty} onChange={(e) => setDifficulty(e.target.value)} select variant="outlined" fullWidth>
-                                        {['Beginner', 'Intermediate', 'Advanced'].map((d) => (
-                                            <MenuItem key={d} value={d}>{d}</MenuItem>
-                                        ))}
-                                    </TextField>
-                                </Box>
-                                <Box>
-                                    <TextField label="Max points" type="number" value={maxPoints} onChange={(e) => setMaxPoints(Number(e.target.value))} variant="outlined" fullWidth />
-                                </Box>
-                                <Box>
-                                    {/* Dataset selector with create (manage moved to Datasets page) */}
-                                    <TextField
-                                        label="Dataset"
-                                        value={dataset}
-                                        onChange={(e) => {
-                                            const v = e.target.value as string;
-                                            if (v === '__create__') { setDatasetDlgOpen(true); return; }
-                                            setDataset(v);
-                                            const hit = datasets.find(d => d.name === v);
-                                            if (hit) setInitSql(hit.sql || '');
-                                        }}
-                                        select
-                                        variant="outlined"
-                                        fullWidth
-                                    >
-                                        <MenuItem value='__create__'><AddIcon fontSize='small' style={{ marginRight: 8 }} />Create new dataset…</MenuItem>
-                                        <Divider />
-                                        {loadingDatasets && <MenuItem disabled>Loading…</MenuItem>}
-                                        {datasets.map(d => <MenuItem key={d.id} value={d.name}>{d.name}</MenuItem>)}
-                                    </TextField>
-                                </Box>
-                                <Box sx={{ gridColumn: '1 / -1' }}>
-                                    <RichTextEditor label='Prompt' value={prompt} onChange={setPrompt} placeholder='Describe the task for students. You can add lists, headings, code, and formulas.' />
-                                </Box>
-                                {/* Grading parameters selector */}
-                                <Box sx={{ gridColumn: '1 / -1', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2 }}>
-                                    <Tooltip
-                                        arrow
-                                        enterDelay={400}
-                                        placement='top-start'
-                                        title={
-                                            <Box sx={{ p: 0.5 }}>
-                                                <Typography variant='caption' sx={{ fontWeight: 700, display: 'block', mb: 0.5 }}>Default grading parameters</Typography>
-                                                <Box component='ul' sx={{ m: 0, pl: 2, listStyle: 'disc' }}>
-                                                    <li><Typography variant='caption'>Syntax sensitivity: {savedDefaults.syntaxSensitivity}</Typography></li>
-                                                    <li><Typography variant='caption'>Semantics sensitivity: {savedDefaults.semanticsSensitivity}</Typography></li>
-                                                    <li><Typography variant='caption'>Results sensitivity: {savedDefaults.resultsSensitivity}</Typography></li>
-                                                    <li><Typography variant='caption'>Priority: {savedDefaults.evaluationPriority}</Typography></li>
-                                                    <li><Typography variant='caption'>Text edit distance: {savedDefaults.textEditDistance}</Typography></li>
-                                                    <li><Typography variant='caption'>Tree edit distance: {savedDefaults.treeEditDistance}</Typography></li>
-                                                    <li><Typography variant='caption'>Check order: {savedDefaults.checkOrder ? 'Yes' : 'No'}</Typography></li>
-                                                    <li><Typography variant='caption'>Auto DB: {savedDefaults.autoDB ? `Yes (${savedDefaults.numberOfDBs || '—'} DBs${savedDefaults.dbName ? `, name: ${savedDefaults.dbName}` : ''})` : 'No'}</Typography></li>
-                                                    <li><Typography variant='caption'>PostgreSQL mode: {savedDefaults.use_postgresql ? 'On' : 'Off'}</Typography></li>
-                                                </Box>
-                                            </Box>
-                                        }
-                                    >
-                                        <Box component='span'>
-                                            <FormControlLabel control={<Switch checked={useDefaultGrading as any} onChange={(_, v) => setUseDefaultGrading(v as any)} />} label="Use default grading parameters" />
-                                        </Box>
-                                    </Tooltip>
-                                    <Button size='small' variant='outlined' disabled={useDefaultGrading as any} onClick={() => setGradingDlgOpen(true)}>Set custom parameters…</Button>
-                                </Box>
-                                <Box sx={{ gridColumn: '1 / -1' }}>
-                                    <SqlEditor label='Init SQL (required per question)' placeholder={`-- REQUIRED: DDL + seed data executed in a fresh DB BEFORE grading this question.`} value={initSql} onChange={setInitSql} minRows={10} />
-                                </Box>
-                                <Box sx={{ gridColumn: '1 / -1' }}>
-                                    <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ minHeight: 36 }}>
-                                        <Tab label="Model answers" sx={{ minHeight: 36 }} />
-                                        <Tab label="Hints" sx={{ minHeight: 36 }} />
-                                    </Tabs>
-                                    <Divider sx={{ mb: 2 }} />
-                                    {tab === 0 && (
-                                        <Box sx={{ display: 'grid', gap: 2 }}>
-                                            <SqlEditor label="Primary model answer (SQL)" placeholder={`-- Instructor-only\nSELECT author, COUNT(*) \nFROM Book \nGROUP BY author \nHAVING COUNT(*) > 3;`} value={modelSql} onChange={setModelSql} minRows={10} />
-                                            <Box>
-                                                <Typography variant='caption' color='text.secondary'>Add additional valid model answers (optional)</Typography>
-                                                <Box sx={{ display: 'grid', gap: 1, mt: 1 }}>
-                                                    <SqlEditor label='Add model answer (SQL)' placeholder='SELECT * FROM Book;' value={modelQueryInput} onChange={setModelQueryInput} minRows={4} onEnterSubmit={addModelQuery} />
-                                                    <Button size='small' variant='outlined' startIcon={<AddIcon />} onClick={addModelQuery} disabled={!modelQueryInput.trim()}>Add</Button>
-                                                    {!modelQueries.length && <Typography variant='caption' color='text.secondary'>No additional model answers added.</Typography>}
-                                                    {!!modelQueries.length && (
-                                                        <List dense sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
-                                                            {modelQueries.map((mq, i) => (
-                                                                <ListItem key={i} secondaryAction={<IconButton edge='end' onClick={() => removeModelQuery(i)}><DeleteIcon fontSize='small' /></IconButton>}>
-                                                                    <ListItemText primaryTypographyProps={{ sx: { fontFamily: 'ui-monospace,monospace', fontSize: 13 } }} primary={mq} />
-                                                                </ListItem>
-                                                            ))}
-                                                        </List>
-                                                    )}
-                                                    {!!modelQueries.length && <Typography variant='caption' color='text.secondary'>{modelQueries.length} additional answer(s).</Typography>}
-                                                </Box>
-                                            </Box>
-                                        </Box>
-                                    )}
-                                    {tab === 1 && (
-                                        <TextField label="Hints" placeholder="Optional" variant="outlined" multiline minRows={6} fullWidth value={hints} onChange={(e) => setHints(e.target.value)} />
-                                    )}
-                                </Box>
+                    <Box sx={{ p: { xs: 1.5, md: 2 }, borderRadius: 2, bgcolor: 'transparent', backgroundImage: 'none' }}>
+                        {/* Editor form */}
+                        <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { md: 'repeat(2,1fr)', xs: '1fr' } }}>
+                            <Box>
+                                <TextField label="Title" placeholder="Find authors with > 3 books" variant="outlined" fullWidth value={title} onChange={(e) => setTitle(e.target.value)} />
                             </Box>
-                        </CardContent>
-                        <CardActions sx={{ px: 2, pb: 2, justifyContent: 'space-between', flexWrap: 'wrap', gap: 1 }}>
+                            <Box>
+                                <TextField label="Difficulty" value={difficulty} onChange={(e) => setDifficulty(e.target.value)} select variant="outlined" fullWidth>
+                                    {['Beginner', 'Intermediate', 'Advanced'].map((d) => (
+                                        <MenuItem key={d} value={d}>{d}</MenuItem>
+                                    ))}
+                                </TextField>
+                            </Box>
+                            <Box>
+                                <TextField label="Max points" type="number" value={maxPoints} onChange={(e) => setMaxPoints(Number(e.target.value))} variant="outlined" fullWidth />
+                            </Box>
+                            <Box>
+                                {/* Dataset selector with create (manage moved to Datasets page) */}
+                                <TextField
+                                    label="Dataset"
+                                    value={dataset}
+                                    onChange={(e) => {
+                                        const v = e.target.value as string;
+                                        if (v === '__create__') { setDatasetDlgOpen(true); return; }
+                                        setDataset(v);
+                                        const hit = datasets.find(d => d.name === v);
+                                        if (hit) setInitSql(hit.sql || '');
+                                    }}
+                                    select
+                                    variant="outlined"
+                                    fullWidth
+                                >
+                                    <MenuItem value='__create__'><AddIcon fontSize='small' style={{ marginRight: 8 }} />Create new dataset…</MenuItem>
+                                    <Divider />
+                                    {loadingDatasets && <MenuItem disabled>Loading…</MenuItem>}
+                                    {datasets.map(d => <MenuItem key={d.id} value={d.name}>{d.name}</MenuItem>)}
+                                </TextField>
+                            </Box>
+                            <Box sx={{ gridColumn: '1 / -1' }}>
+                                <RichTextEditor label='Prompt' value={prompt} onChange={setPrompt} placeholder='Describe the task for students. You can add lists, headings, code, and formulas.' />
+                            </Box>
+                            {/* Grading parameters selector */}
+                            <Box sx={{ gridColumn: '1 / -1', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2 }}>
+                                <Tooltip
+                                    arrow
+                                    enterDelay={400}
+                                    placement='top-start'
+                                    title={
+                                        <Box sx={{ p: 0.5 }}>
+                                            <Typography variant='caption' sx={{ fontWeight: 700, display: 'block', mb: 0.5 }}>Default grading parameters</Typography>
+                                            <Box component='ul' sx={{ m: 0, pl: 2, listStyle: 'disc' }}>
+                                                <li><Typography variant='caption'>Syntax sensitivity: {savedDefaults.syntaxSensitivity}</Typography></li>
+                                                <li><Typography variant='caption'>Semantics sensitivity: {savedDefaults.semanticsSensitivity}</Typography></li>
+                                                <li><Typography variant='caption'>Results sensitivity: {savedDefaults.resultsSensitivity}</Typography></li>
+                                                <li><Typography variant='caption'>Priority: {savedDefaults.evaluationPriority}</Typography></li>
+                                                <li><Typography variant='caption'>Text edit distance: {savedDefaults.textEditDistance}</Typography></li>
+                                                <li><Typography variant='caption'>Tree edit distance: {savedDefaults.treeEditDistance}</Typography></li>
+                                                <li><Typography variant='caption'>Check order: {savedDefaults.checkOrder ? 'Yes' : 'No'}</Typography></li>
+                                                <li><Typography variant='caption'>Auto DB: {savedDefaults.autoDB ? `Yes (${savedDefaults.numberOfDBs || '—'} DBs${savedDefaults.dbName ? `, name: ${savedDefaults.dbName}` : ''})` : 'No'}</Typography></li>
+                                                <li><Typography variant='caption'>PostgreSQL mode: {savedDefaults.use_postgresql ? 'On' : 'Off'}</Typography></li>
+                                            </Box>
+                                        </Box>
+                                    }
+                                >
+                                    <Box component='span'>
+                                        <FormControlLabel control={<Switch checked={useDefaultGrading as any} onChange={(_, v) => setUseDefaultGrading(v as any)} />} label="Use default grading parameters" />
+                                    </Box>
+                                </Tooltip>
+                                <Button size='small' variant='outlined' disabled={useDefaultGrading as any} onClick={() => setGradingDlgOpen(true)}>Set custom parameters…</Button>
+                            </Box>
+                            <Box sx={{ gridColumn: '1 / -1' }}>
+                                <SqlEditor label='Init SQL (required per question)' placeholder={`-- REQUIRED: DDL + seed data executed in a fresh DB BEFORE grading this question.`} value={initSql} onChange={setInitSql} minRows={10} />
+                            </Box>
+                            <Box sx={{ gridColumn: '1 / -1' }}>
+                                <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ minHeight: 36 }}>
+                                    <Tab label="Model answers" sx={{ minHeight: 36 }} />
+                                    <Tab label="Hints" sx={{ minHeight: 36 }} />
+                                </Tabs>
+                                <Divider sx={{ mb: 2 }} />
+                                {tab === 0 && (
+                                    <Box sx={{ display: 'grid', gap: 2 }}>
+                                        <SqlEditor label="Primary model answer (SQL)" placeholder={`-- Instructor-only\nSELECT author, COUNT(*) \nFROM Book \nGROUP BY author \nHAVING COUNT(*) > 3;`} value={modelSql} onChange={setModelSql} minRows={10} />
+                                        <Box>
+                                            <Typography variant='caption' color='text.secondary'>Add additional valid model answers (optional)</Typography>
+                                            <Box sx={{ display: 'grid', gap: 1, mt: 1 }}>
+                                                <SqlEditor label='Add model answer (SQL)' placeholder='SELECT * FROM Book;' value={modelQueryInput} onChange={setModelQueryInput} minRows={4} onEnterSubmit={addModelQuery} />
+                                                <Button size='small' variant='outlined' startIcon={<AddIcon />} onClick={addModelQuery} disabled={!modelQueryInput.trim()}>Add</Button>
+                                                {!modelQueries.length && <Typography variant='caption' color='text.secondary'>No additional model answers added.</Typography>}
+                                                {!!modelQueries.length && (
+                                                    <List dense sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
+                                                        {modelQueries.map((mq, i) => (
+                                                            <ListItem key={i} secondaryAction={<IconButton edge='end' onClick={() => removeModelQuery(i)}><DeleteIcon fontSize='small' /></IconButton>}>
+                                                                <ListItemText primaryTypographyProps={{ sx: { fontFamily: 'ui-monospace,monospace', fontSize: 13 } }} primary={mq} />
+                                                            </ListItem>
+                                                        ))}
+                                                    </List>
+                                                )}
+                                                {!!modelQueries.length && <Typography variant='caption' color='text.secondary'>{modelQueries.length} additional answer(s).</Typography>}
+                                            </Box>
+                                        </Box>
+                                    </Box>
+                                )}
+                                {tab === 1 && (
+                                    <TextField label="Hints" placeholder="Optional" variant="outlined" multiline minRows={6} fullWidth value={hints} onChange={(e) => setHints(e.target.value)} />
+                                )}
+                            </Box>
+                        </Box>
+                        <Box sx={{ mt: 2, justifyContent: 'space-between', display: 'flex', flexWrap: 'wrap', gap: 1 }}>
                             {editingId && <Button startIcon={<CancelIcon />} size='small' onClick={() => { resetForm(); setView('list'); }}>Cancel edit</Button>}
                             <Box sx={{ display: 'flex', gap: 1 }}>
-                                <Button variant="outlined" startIcon={<VisibilityIcon />} size="small" onClick={openPreview}>Preview</Button>
                                 <Button variant="outlined" startIcon={editingId ? <SaveIcon /> : <TaskAltIcon />} size="small" disabled={!canSubmit || saving} onClick={() => submitQuestion(false)}>{editingId ? 'Update draft' : 'Save draft'}</Button>
                                 <Button variant="contained" startIcon={<AutoAwesomeIcon />} size="small" disabled={!canSubmit || saving} onClick={() => submitQuestion(true)}>{editingId ? 'Update & Publish' : 'Publish'}</Button>
                             </Box>
-                        </CardActions>
-                    </Card>
+                        </Box>
+                    </Box>
                 )}
 
                 {view === 'list' && (
-                    <Card>
-                        <CardHeader
-                            sx={{ pb: 1 }}
-                            title={<Typography variant="subtitle1" fontWeight={600}>Question Bank</Typography>}
-                            action={
-                                <Box sx={{ display: 'flex', gap: 1 }}>
-                                    <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={startCreate}>Create</Button>
-                                    <Button variant="outlined" size="small" startIcon={<VisibilityIcon />} disabled={!selectedId} onClick={openPreview}>Preview</Button>
-                                </Box>
-                            }
-                        />
-                        <CardContent sx={{ pt: 0 }}>
-                            <BankTable rows={questions} loading={loading} onEdit={loadQuestionDetail} selectedId={selectedId} onSelect={setSelectedId} onAssign={openAssignChooser} onDelete={deleteQuestion} />
-                            {error && <Typography variant="caption" color="error" sx={{ mt: 1 }}>{error}</Typography>}
-                        </CardContent>
-                    </Card>
+                    <Box sx={{ p: { xs: 1.5, md: 2 }, borderRadius: 2, bgcolor: 'transparent', backgroundImage: 'none' }}>
+                        <BankTable rows={questions} loading={loading} onEdit={loadQuestionDetail} selectedId={selectedId} onSelect={setSelectedId} onAssign={openAssignChooser} onDelete={deleteQuestion} />
+                        {error && <Typography variant="caption" color="error" sx={{ mt: 1 }}>{error}</Typography>}
+                    </Box>
                 )}
                 {/* ASSIGN QUESTION -> ASSIGNMENT DIALOG */}
                 <Dialog open={assignDialogOpen} onClose={() => setAssignDialogOpen(false)} fullWidth maxWidth='sm'>
