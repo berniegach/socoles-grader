@@ -2,7 +2,6 @@
 import React from 'react';
 import { Box, LinearProgress, Typography } from '@mui/material';
 
-// New rubric shape aligned with backend: syntax, semantics, results (0..1 normalized * 100 for display)
 export type Rubric = { syntax: number | null; semantics: number | null; results: number | null; absent?: { syntax?: boolean; semantics?: boolean; results?: boolean } };
 
 function Bar({ label, value, greyed }: { label: string; value: number | null; greyed?: boolean }) {

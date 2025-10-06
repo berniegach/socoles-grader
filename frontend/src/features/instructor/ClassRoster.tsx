@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useState, useRef } from 'react';
-import { Box, Button, Card, CardContent, CardHeader, Chip, LinearProgress, Snackbar, Alert, Table, TableBody, TableCell, TableHead, TableRow, TextField, Stack, IconButton, Tooltip } from '@mui/material';
+import { Box, Button, Card, CardContent, Chip, LinearProgress, Snackbar, Alert, Table, TableBody, TableCell, TableHead, TableRow, TextField, Stack, IconButton, Tooltip, Typography } from '@mui/material';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
@@ -9,6 +9,7 @@ import LinkIcon from '@mui/icons-material/Link';
 import CancelIcon from '@mui/icons-material/CancelOutlined';
 import Papa from 'papaparse';
 import PageCard from '@/components/PageCard';
+import HeaderActions from '@/components/HeaderActions';
 import { useAuth } from '@/features/auth/AuthProvider';
 import type { RosterEntry } from '@/lib/types';
 
@@ -22,6 +23,8 @@ export default function ClassRoster() {
     // manual add form
     const [name, setName] = useState('');
     const [email, setEmail] = useState('');
+    // hidden file input ref for import CSV
+    const inputRef = useRef<HTMLInputElement | null>(null);
 
     async function load() {
         try {
@@ -144,23 +147,34 @@ export default function ClassRoster() {
         }
     }
 
+    const headerActions = (
+        <>
+            <HeaderActions
+                actions={[
+                    {
+                        key: 'import',
+                        label: 'Import CSV',
+                        ariaLabel: 'Import CSV',
+                        icon: <UploadFileIcon fontSize='small' />,
+                        onClick: () => { /* trigger hidden input */ inputRef.current?.click(); },
+                    },
+                    {
+                        key: 'refresh',
+                        ariaLabel: 'Refresh roster',
+                        label: 'Refresh',
+                        icon: <RefreshIcon fontSize='small' />,
+                        onClick: () => load(),
+                        disabled: busy,
+                    }
+                ]}
+            />
+            <input ref={inputRef} hidden accept='.csv' type='file' onChange={onCsv} />
+        </>
+    );
+
     return (
-        <PageCard>
-            <CardHeader title="Class Roster" action={<Stack direction="row" spacing={1}>
-                <Button variant="outlined" component="label" startIcon={<UploadFileIcon />} disabled={busy}>
-                    Import CSV
-                    <input hidden accept=".csv" type="file" onChange={onCsv} />
-                </Button>
-                <Tooltip title="Refresh now">
-                    <span>
-                        <IconButton aria-label="refresh" onClick={() => load()} disabled={busy} size="small">
-                            <RefreshIcon fontSize="small" />
-                        </IconButton>
-                    </span>
-                </Tooltip>
-            </Stack>} />
-            {busy && <LinearProgress />}
-            <CardContent>
+        <PageCard headerTitle='Class Roster' headerProps={{ height: 56 }} headerActions={headerActions} headerActionsVariant='plain' loadingProgress={busy}>
+            <Box sx={{ p: { xs: 1.5, md: 2 } }}>
                 <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} alignItems={{ xs: 'stretch', sm: 'flex-end' }} sx={{ mb: 2 }}>
                     <TextField size="small" label="Full name" value={name} onChange={(e) => setName(e.target.value)} sx={{ flex: 1 }} />
                     <TextField size="small" label="Email" value={email} onChange={(e) => setEmail(e.target.value)} sx={{ flex: 1 }} />
@@ -212,8 +226,7 @@ export default function ClassRoster() {
                         )}
                     </TableBody>
                 </Table>
-            </CardContent>
-
+            </Box>
             <Snackbar open={!!note} autoHideDuration={3000} onClose={() => setNote('')} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
                 <Alert onClose={() => setNote('')} severity="success" sx={{ width: '100%' }}>{note}</Alert>
             </Snackbar>

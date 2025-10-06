@@ -15,6 +15,7 @@ export default function InviteAcceptPage({ params }: { params: Promise<{ token: 
     const [loading, setLoading] = useState(true);
     const [inviteOk, setInviteOk] = useState(false);
     const [note, setNote] = useState('');
+    const [courseName, setCourseName] = useState<string>('');
     const [err, setErr] = useState('');
     const { setUser } = useAuth();
 
@@ -31,6 +32,7 @@ export default function InviteAcceptPage({ params }: { params: Promise<{ token: 
                 if (cancelled) return;
                 setName(data?.name || '');
                 setEmail(data?.email || '');
+                setCourseName(data?.courseName || '');
                 const used = !!data?.used_at;
                 const expired = data?.expires_at ? new Date(data.expires_at) < new Date() : false;
                 if (used) {
@@ -80,7 +82,7 @@ export default function InviteAcceptPage({ params }: { params: Promise<{ token: 
     return (
         <Box sx={{ minHeight: '100vh', display: 'grid', placeItems: 'center', p: 2 }}>
             <Card sx={{ width: '100%', maxWidth: 520 }}>
-                <CardHeader title="Join Class" subheader={<Typography variant="body2">Create your password to join and sign in later</Typography>} />
+                <CardHeader title={`Join ${courseName ? courseName : 'Course'}`} subheader={<Typography variant="body2">{courseName ? `You're accepting an invite to join the course ${courseName}. Create your password to continue.` : 'Create your password to join and sign in later'}</Typography>} />
                 {(busy || loading) && <LinearProgress />}
                 <CardContent>
                     {!!note && <Alert severity="success" sx={{ mb: 2 }}>{note}</Alert>}

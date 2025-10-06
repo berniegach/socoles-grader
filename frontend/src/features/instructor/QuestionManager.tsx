@@ -6,7 +6,6 @@ import {
     Card,
     CardHeader,
     CardContent,
-    CardActions,
     Typography,
     TextField,
     MenuItem,
@@ -28,12 +27,11 @@ import {
     DialogContent,
     DialogActions,
     LinearProgress,
-    Collapse,
     Menu,
     Switch,
     FormControlLabel,
 } from '@mui/material';
-import HeaderActionButton from '@/components/HeaderActionButton';
+import HeaderActions from '@/components/HeaderActions';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import EditIcon from '@mui/icons-material/Edit';
@@ -51,12 +49,11 @@ import type { Assignment } from '@/lib/types';
 import { DEFAULT_GRADING_OPTIONS, API_BASE, GRADE_PATH } from '@/lib/api';
 import type { GradingOptions as GradingOptionsType } from '@/lib/types';
 import GradingOptions from '@/features/instructor/GradingOptions';
-import { useTheme, alpha } from '@mui/material/styles';
+import { useTheme } from '@mui/material/styles';
 import PageCard from '@/components/PageCard';
 import QuestionCard from '@/components/QuestionCard';
+import DifficultyChip from '@/components/DifficultyChip';
 import RichTextEditor from '@/components/RichTextEditor';
-import DOMPurify from 'dompurify';
-import SafeRichText from '@/components/SafeRichText';
 import PromptWithHint from '@/components/PromptWithHint';
 import SchemaPreview from '@/components/SchemaPreview';
 import SqlEditor from '@/components/SqlEditor';
@@ -621,24 +618,39 @@ export default function QuestionManager() {
     }
 
     const headerActions = (
-        <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'nowrap' }}>
-            {view === 'list' && (
-                <>
-                    <HeaderActionButton onClick={openPreview} disabled={!selectedId} aria-label='Preview question' title='Preview question' startIcon={<VisibilityIcon fontSize='small' />}>Preview</HeaderActionButton>
-                    <HeaderActionButton onClick={startCreate} aria-label='Add question' title='Add question'>
-                        <AddIcon fontSize='small' />
-                    </HeaderActionButton>
-                </>
-            )}
-            {view === 'editor' && (
-                <>
-                    <HeaderActionButton onClick={() => { setView('list'); }} aria-label='Back to list' title='Back to list'>
-                        <ArrowBackIcon fontSize='small' />
-                    </HeaderActionButton>
-                    <HeaderActionButton onClick={resetForm}>New</HeaderActionButton>
-                </>
-            )}
-        </Box>
+        <HeaderActions
+            actions={[
+                view === 'list' ? {
+                    key: 'preview',
+                    label: 'Preview question',
+                    ariaLabel: 'Preview question',
+                    onClick: openPreview,
+                    disabled: !selectedId,
+                    icon: <VisibilityIcon fontSize='small' />,
+                } : null,
+                view === 'list' ? {
+                    key: 'add',
+                    label: 'Add question',
+                    ariaLabel: 'Add question',
+                    onClick: startCreate,
+                    icon: <AddIcon fontSize='small' />,
+                    emphasis: 'high',
+                } : null,
+                view === 'editor' ? {
+                    key: 'back',
+                    label: 'Back to list',
+                    ariaLabel: 'Back to list',
+                    onClick: () => { setView('list'); },
+                    icon: <ArrowBackIcon fontSize='small' />,
+                } : null,
+                view === 'editor' ? {
+                    key: 'new',
+                    label: 'New',
+                    ariaLabel: 'New question form',
+                    onClick: resetForm,
+                } : null,
+            ].filter(Boolean) as any}
+        />
     );
 
     return (
@@ -824,7 +836,7 @@ export default function QuestionManager() {
                                     <CardHeader title={<Typography variant='subtitle1' sx={{ fontSize: 16 }}>{previewData?.title || title || 'Untitled question'}</Typography>} subheader={<Typography variant='caption' color='text.secondary'>Preview • Attempts left: {attemptsLeft}</Typography>} />
                                     <CardContent sx={{ pt: 0, display: 'grid', gap: 1.5 }}>
                                         <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-                                            {!!(previewData?.difficulty || difficulty) && <Chip size='small' label={previewData?.difficulty || difficulty} />}
+                                            {!!(previewData?.difficulty || difficulty) && <DifficultyChip value={previewData?.difficulty || difficulty} />}
                                             <Chip size='small' label={`${previewData?.maxPoints ?? maxPoints} pts`} />
                                             <Chip size='small' variant='outlined' label={`Dataset: ${previewData?.dataset || dataset}`} />
                                             <Chip size='small' color='default' variant='outlined' label={`Attempts used: ${attemptsUsed}`} />
@@ -895,7 +907,6 @@ export default function QuestionManager() {
                     </DialogActions>
                 </Dialog>
 
-                {/* Dataset management moved to Datasets page */}
             </Box>
         </PageCard>
     );

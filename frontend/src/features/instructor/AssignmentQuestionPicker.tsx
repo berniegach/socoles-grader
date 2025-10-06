@@ -1,10 +1,9 @@
 "use client";
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, forwardRef, useImperativeHandle } from 'react';
 import { useAuth } from '@/features/auth/AuthProvider';
 import {
     Box,
     Card,
-    CardHeader,
     CardContent,
     CardActions,
     Typography,
@@ -20,18 +19,22 @@ import {
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
-import SaveIcon from '@mui/icons-material/Save';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 import type { Assignment, AssignmentWithQuestions, Question } from '@/lib/types';
+import DifficultyChip from '@/components/DifficultyChip';
 
 interface PickerProps {
     assignment: Assignment | AssignmentWithQuestions | null;
     onClose?: () => void;
 }
 
-export default function AssignmentQuestionPicker({ assignment, onClose }: PickerProps) {
+export interface AssignmentQuestionPickerHandle {
+    save: () => Promise<void> | void;
+}
+
+const AssignmentQuestionPicker = forwardRef<AssignmentQuestionPickerHandle, PickerProps>(function AssignmentQuestionPicker({ assignment, onClose }, ref) {
     const { authFetch, user } = useAuth();
     const [loadingBank, setLoadingBank] = useState(false);
     const [loadingLinks, setLoadingLinks] = useState(false);
@@ -134,18 +137,11 @@ export default function AssignmentQuestionPicker({ assignment, onClose }: Picker
 
     const bankIds = useMemo(() => new Set(linked.map(l => l.questionId)), [linked]);
 
+    useImperativeHandle(ref, () => ({ save: saveOrder }), [linked, pointsEdit, assignId]);
+
     return (
-        <Card variant="outlined" sx={{ display: 'flex', flexDirection: 'column', minHeight: 520, maxHeight: '82vh' }}>
-            <CardHeader
-                title={
-                    <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-                        <Typography variant='subtitle1'>Assignment Questions{assignment ? `: ${assignment.title}` : ''}</Typography>
-                        <Typography variant='caption' color='text.secondary'>Link bank questions to this assignment</Typography>
-                    </Box>
-                }
-                action={onClose && <Button size='small' onClick={onClose}>Close</Button>}
-            />
-            <CardContent sx={{ flex: 1, display: 'grid', gap: 2, gridTemplateColumns: { md: '1fr 1fr', xs: '1fr' }, minHeight: 0, overflowX: 'auto', overflowY: 'hidden' }}>
+        <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: 520, maxHeight: '82vh' }}>
+            <Box sx={{ flex: 1, display: 'grid', gap: 2, gridTemplateColumns: { md: '1fr 1fr', xs: '1fr' }, minHeight: 0, overflowX: 'auto', overflowY: 'hidden' }}>
                 {/* BANK */}
                 <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: 0, minWidth: { md: 420, xs: '100%' } }}>
                     <Box sx={{ position: 'sticky', top: 0, zIndex: 1, bgcolor: 'background.paper', borderBottom: '1px solid', borderColor: 'divider', mb: 1, py: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
@@ -174,7 +170,7 @@ export default function AssignmentQuestionPicker({ assignment, onClose }: Picker
                                             {isLinked && <Chip label='Linked' size='small' color='primary' variant='outlined' />}
                                         </Box>
                                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: .75, flexWrap: 'wrap' }}>
-                                            <Chip size='small' label={q.difficulty} />
+                                            <DifficultyChip value={q.difficulty} />
                                             <Chip size='small' label={q.status} color={q.status === 'Published' ? 'primary' : 'default'} variant={q.status === 'Published' ? 'outlined' : 'filled'} />
                                             <Chip size='small' label={`Max ${q.maxPoints} pts`} variant='outlined' />
                                         </Box>
@@ -207,7 +203,6 @@ export default function AssignmentQuestionPicker({ assignment, onClose }: Picker
                             <Chip size='small' label={`${linked.length}`} />
                             <Chip size='small' color='primary' variant='outlined' label={`Total: ${totalLinkedPoints} pts`} />
                         </Box>
-                        <Button size='small' variant='contained' startIcon={<SaveIcon />} onClick={saveOrder} disabled={savingOrder || !assignId}>{savingOrder ? 'Saving…' : 'Save changes'}</Button>
                     </Box>
                     <Box sx={{ flex: 1, minHeight: 0, overflow: 'auto', border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1, display: 'flex', flexDirection: 'column', gap: 1, position: 'relative' }}>
                         {loadingLinks && (
@@ -225,7 +220,7 @@ export default function AssignmentQuestionPicker({ assignment, onClose }: Picker
                                         </Box>
                                     </Box>
                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: .75, flexWrap: 'wrap' }}>
-                                        <Chip size='small' label={l.difficulty} />
+                                        <DifficultyChip value={l.difficulty} />
                                         <Chip size='small' label={l.status} color={l.status === 'Published' ? 'primary' : 'default'} variant={l.status === 'Published' ? 'outlined' : 'filled'} />
                                         <Chip size='small' label={`Default ${l.maxPoints} pts`} variant='outlined' />
                                     </Box>
@@ -273,15 +268,17 @@ export default function AssignmentQuestionPicker({ assignment, onClose }: Picker
                         {savingOrder && <LinearProgress sx={{ position: 'absolute', top: 0, left: 0, right: 0 }} />}
                     </Box>
                 </Box>
-            </CardContent>
+            </Box>
             {!!error && <Alert severity='error' sx={{ mx: 2, mb: 1 }}>{error}</Alert>}
-            <CardActions sx={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 1 }}>
+            <CardActions sx={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 1, px: 2, pb: 2 }}>
                 <Typography variant='caption' color='text.secondary'>Changes are not saved until you click "Save changes".</Typography>
                 <Box sx={{ display: 'flex', gap: 1 }}>
                     <Button size='small' variant='outlined' onClick={() => { loadBank(); loadLinked(); }}>Reload</Button>
                     {onClose && <Button size='small' onClick={onClose}>Done</Button>}
                 </Box>
             </CardActions>
-        </Card>
+        </Box>
     );
-}
+});
+
+export default AssignmentQuestionPicker;

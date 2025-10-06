@@ -3,17 +3,14 @@ import { useEffect, useRef, useState } from 'react';
 import {
     Box,
     Button,
-    Card,
-    CardContent,
-    CardHeader,
+    Chip,
+    Menu,
+    MenuItem,
     Dialog,
     DialogActions,
     DialogContent,
     DialogTitle,
-    Divider,
     IconButton,
-    LinearProgress,
-    MenuItem,
     Snackbar,
     Alert,
     TextField,
@@ -23,6 +20,10 @@ import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/DeleteOutline';
 import RefreshIcon from '@mui/icons-material/Refresh';
+import UploadFileIcon from '@mui/icons-material/UploadFile';
+import MoreVertIcon from '@mui/icons-material/MoreVert';
+import HeaderActions from '@/components/HeaderActions';
+import TilesGrid from '@/components/TilesGrid';
 import PageCard from '@/components/PageCard';
 import { useAuth } from '@/features/auth/AuthProvider';
 
@@ -154,58 +155,111 @@ export default function DatasetsManager() {
         } catch (e: any) { setError(e.message || 'Delete failed'); } finally { setDeletingId(null); }
     }
 
+    // tile menu state
+    const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
+    const [menuId, setMenuId] = useState<string | null>(null);
+    const openMenu = Boolean(menuAnchor);
+    const handleMenuOpen = (e: React.MouseEvent<HTMLElement>, id: string) => { e.stopPropagation(); setMenuAnchor(e.currentTarget); setMenuId(id); };
+    const handleMenuClose = () => { setMenuAnchor(null); setMenuId(null); };
+    const triggerMenu = (cb: (id: string) => void) => { if (menuId) cb(menuId); handleMenuClose(); };
+
+    const headerActions = (
+        <>
+            <HeaderActions
+                actions={[
+                    { key: 'new', ariaLabel: 'New dataset', title: 'New dataset', icon: <AddIcon fontSize='small' />, onClick: openCreate },
+                    { key: 'import', ariaLabel: 'Import .sql', title: 'Import .sql', icon: <UploadFileIcon fontSize='small' />, onClick: triggerImport },
+                    { key: 'reload', ariaLabel: 'Reload', title: 'Reload datasets', icon: <RefreshIcon fontSize='small' />, onClick: () => load(), disabled: loading }
+                ]}
+            />
+            <input ref={importInputRef} hidden type='file' accept='.sql' onChange={onFileChange} />
+        </>
+    );
+
     return (
-        <PageCard>
-            <CardHeader title={<Typography variant="subtitle1" fontWeight={600}>Datasets</Typography>} action={
-                <Box sx={{ display: 'flex', gap: 1 }}>
-                    <Button size="small" variant="contained" startIcon={<AddIcon />} onClick={openCreate}>New dataset</Button>
-                    <Button size="small" variant="outlined" onClick={triggerImport}>Import .sql</Button>
-                    <IconButton onClick={() => load()} disabled={loading} title="Reload"><RefreshIcon /></IconButton>
-                    <input ref={importInputRef} hidden type="file" accept=".sql" onChange={onFileChange} />
-                </Box>
-            } />
-            {loading && <LinearProgress />}
-            <CardContent>
+        <PageCard headerTitle='Datasets' headerProps={{ height: 56 }} headerActions={headerActions} headerActionsVariant='plain' loadingProgress={loading}>
+            <Box sx={{ p: { xs: 1.5, md: 2 } }}>
                 {error && <Alert severity="error" sx={{ mb: 1 }}>{error}</Alert>}
                 <Box sx={{ display: 'grid', gap: 1.25 }}>
                     {!datasets.length && !loading && (
                         <Typography variant="body2" color="text.secondary">No datasets yet.</Typography>
                     )}
-                    {datasets.map(ds => {
-                        const schema = extractSchema(ds.sql || '');
-                        return (
-                            <Card key={ds.id} variant="outlined">
-                                <CardHeader title={ds.name} subheader={<Typography variant="caption" color="text.secondary">SQL length: {ds.sql?.length || 0} chars</Typography>} action={
-                                    <Box sx={{ display: 'flex', gap: .5 }}>
-                                        <Button size="small" startIcon={<EditIcon fontSize='small' />} onClick={() => openEdit(ds)}>Edit</Button>
-                                        <Button size="small" color="error" startIcon={<DeleteIcon fontSize='small' />} onClick={() => del(ds.id)} disabled={deletingId === ds.id}>{deletingId === ds.id ? 'Deleting…' : 'Delete'}</Button>
-                                    </Box>
-                                } />
-                                <CardContent sx={{ pt: 0 }}>
-                                    {schema.length ? (
-                                        <Box sx={{ display: 'grid', gap: .5 }}>
-                                            {schema.map(t => (
-                                                <Typography key={t.name} variant="caption" sx={{ fontFamily: 'ui-monospace,monospace' }}>
-                                                    {t.name}(
-                                                    {t.columns.slice(0, 8).map((c, i) => (
-                                                        <Box key={c.name + i} component="span" sx={c.pk ? { textDecoration: 'underline', textDecorationColor: 'success.main', textDecorationThickness: '2px', textUnderlineOffset: '2px' } : undefined}>
-                                                            {c.name}
-                                                        </Box>
-                                                    )).reduce<React.ReactNode[]>((acc, el, i, arr) => acc.concat(el, i < arr.length - 1 ? ', ' : ''), [])}
-                                                    {t.columns.length > 8 ? ', …' : ''}
-                                                    )
-                                                </Typography>
-                                            ))}
+                    <TilesGrid>
+                        {datasets.map(ds => {
+                            const schema = extractSchema(ds.sql || '');
+                            const tables = schema.length;
+                            const columns = schema.reduce((sum, t) => sum + t.columns.length, 0);
+                            return (
+                                <Box
+                                    key={ds.id}
+                                    sx={(theme) => ({
+                                        position: 'relative',
+                                        p: 1.25,
+                                        borderRadius: 1.25,
+                                        cursor: 'default',
+                                        display: 'grid',
+                                        gap: 0.75,
+                                        minHeight: 112,
+                                        background: theme.palette.mode === 'dark'
+                                            ? 'rgba(255,255,255,0.03)'
+                                            : 'linear-gradient(145deg,#ffffff,#f9f9f9)',
+                                        border: '1px solid',
+                                        borderColor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
+                                        boxShadow: '0 1px 2px rgba(0,0,0,0.08)',
+                                        transition: 'background .25s, box-shadow .25s, transform .25s, border-color .25s',
+                                        outline: 'none',
+                                        '&:hover': {
+                                            boxShadow: '0 4px 12px -2px rgba(0,0,0,0.25)',
+                                            transform: 'translateY(-2px)',
+                                            borderColor: 'primary.light'
+                                        },
+                                        '&:focus-visible': {
+                                            boxShadow: '0 0 0 2px #fff, 0 0 0 4px #ff66c4',
+                                        }
+                                    })}
+                                >
+                                    <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1 }}>
+                                        <Box sx={{ flex: 1, minWidth: 0 }}>
+                                            <Typography variant='subtitle2' sx={{ fontWeight: 600, lineHeight: 1.2, pr: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>{ds.name}</Typography>
+                                            <Typography variant='caption' color='text.secondary'>SQL length: {ds.sql?.length || 0} chars</Typography>
                                         </Box>
-                                    ) : (
-                                        <Typography variant="caption" color="text.secondary">No CREATE TABLE statements detected.</Typography>
-                                    )}
-                                </CardContent>
-                            </Card>
-                        );
-                    })}
+                                        <IconButton size='small' onClick={(e) => handleMenuOpen(e, ds.id)} aria-label={`Actions for ${ds.name}`}>
+                                            <MoreVertIcon fontSize='small' />
+                                        </IconButton>
+                                    </Box>
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6, flexWrap: 'wrap' }}>
+                                        <Chip size='small' label={`${tables} table${tables !== 1 ? 's' : ''}`} variant='outlined' />
+                                        <Chip size='small' label={`${columns} col`} variant='outlined' />
+                                        <Chip size='small' label={`${(ds.sql?.length || 0)} chars`} />
+                                    </Box>
+                                    <Box sx={{ display: 'grid', gap: .5, maxHeight: 160, overflowY: 'auto', pr: 0.5 }}>
+                                        {schema.length ? schema.map(t => (
+                                            <Typography key={t.name} variant='caption' sx={{ fontFamily: 'ui-monospace,monospace', display: 'block' }}>
+                                                {t.name}(
+                                                {t.columns.map((c, i) => (
+                                                    <Box key={c.name + i} component='span' sx={c.pk ? { textDecoration: 'underline', textDecorationColor: 'success.main', textDecorationThickness: '2px', textUnderlineOffset: '2px' } : undefined}>
+                                                        {c.name}
+                                                    </Box>
+                                                )).reduce<React.ReactNode[]>((acc, el, i, arr) => acc.concat(el, i < arr.length - 1 ? ', ' : ''), [])}
+                                                )
+                                            </Typography>
+                                        )) : (
+                                            <Typography variant='caption' color='text.secondary'>No CREATE TABLE statements detected.</Typography>
+                                        )}
+                                    </Box>
+                                </Box>
+                            );
+                        })}
+                    </TilesGrid>
+                    <Menu anchorEl={menuAnchor} open={openMenu} onClose={handleMenuClose} keepMounted>
+                        <MenuItem onClick={() => { triggerMenu(id => { const ds = datasets.find(d => d.id === id); if (ds) openEdit(ds); }); }}><EditIcon fontSize='small' style={{ marginRight: 8 }} /> Edit</MenuItem>
+                        <MenuItem onClick={() => { triggerMenu(id => del(id)); }}>
+                            <DeleteIcon fontSize='small' color='error' style={{ marginRight: 8 }} />
+                            <Typography variant='body2' color='error.main'>Delete</Typography>
+                        </MenuItem>
+                    </Menu>
                 </Box>
-            </CardContent>
+            </Box>
 
             <Dialog open={dlgOpen} onClose={closeDlg} fullWidth maxWidth='md'>
                 <DialogTitle>{editingId ? 'Edit dataset' : 'New dataset'}</DialogTitle>

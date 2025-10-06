@@ -1,6 +1,7 @@
 "use client";
 import * as React from 'react';
 import { Box, Chip, Typography, IconButton, Tooltip } from '@mui/material';
+import DifficultyChip from './DifficultyChip';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 
 export interface QuestionCardProps {
@@ -66,26 +67,39 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({ id, title, difficult
                 )}
             </Box>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6, flexWrap: 'wrap' }}>
-                <Chip
-                    label={difficulty}
-                    size='small'
-                    sx={(theme) => ({
-                        fontWeight: 500,
-                        textTransform: 'capitalize',
-                        background: {
-                            Beginner: 'linear-gradient(135deg,#56ab2f,#a8e063)',
-                            Intermediate: 'linear-gradient(135deg,#36d1dc,#5b86e5)',
-                            Advanced: 'linear-gradient(135deg,#ff512f,#dd2476)'
-                        }[difficulty as 'Beginner' | 'Intermediate' | 'Advanced'] || theme.palette.action.selected,
-                        color: '#fff',
-                        px: 0.75
-                    })}
-                />
+                <DifficultyChip value={difficulty} />
                 <Chip
                     label={status}
                     size='small'
-                    variant={status === 'Published' ? 'filled' : 'outlined'}
-                    color={status === 'Published' ? 'primary' : (status === 'Draft' ? 'default' : 'secondary') as any}
+                    sx={(theme) => {
+                        if (status === 'Published') {
+                            return {
+                                fontWeight: 500,
+                                background: theme.palette.mode === 'dark' ? 'rgba(120,190,255,0.15)' : 'rgba(100,160,220,0.15)',
+                                color: theme.palette.mode === 'dark' ? '#d2ecff' : '#204766',
+                                border: '1px solid',
+                                borderColor: theme.palette.mode === 'dark' ? 'rgba(150,210,255,0.35)' : 'rgba(120,180,235,0.35)'
+                            };
+                        }
+                        if (status === 'Draft') {
+                            return {
+                                fontWeight: 500,
+                                background: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)',
+                                color: theme.palette.text.secondary,
+                                border: '1px solid',
+                                borderColor: theme.palette.divider
+                            };
+                        }
+                        // Fallback or other statuses
+                        return {
+                            fontWeight: 500,
+                            background: theme.palette.mode === 'dark' ? 'rgba(255,200,120,0.18)' : 'rgba(255,180,90,0.2)',
+                            color: theme.palette.mode === 'dark' ? '#ffe7c5' : '#7a4400',
+                            border: '1px solid',
+                            borderColor: theme.palette.mode === 'dark' ? 'rgba(255,210,150,0.4)' : 'rgba(255,170,80,0.4)'
+                        };
+                    }}
+                    variant='outlined'
                 />
                 <Chip label={`${maxPoints} pts`} size='small' variant='outlined' />
                 <Chip

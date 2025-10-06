@@ -174,7 +174,7 @@ async function gradeSubmissionCore(instructorId: string, submissionId: string): 
                 // but continue to persist status
             }
 
-            // Persist result back into question_submissions and (optionally) history
+            // Persist result back into question_submissions 
             try {
                 // Use parsed rubric (rb) if available; otherwise null
                 let rubric: QuestionRubric | null = null;

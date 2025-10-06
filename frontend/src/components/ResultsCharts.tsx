@@ -132,7 +132,7 @@ export default function ResultsCharts({ results = [] as any[], loadAttemptsFor, 
         .slice(0, 5);
 
     // -------- Advanced Charts Data Preparation --------
-    // Expect (optionally) each result to have attempts: [{attempt, grade, ts, rubric:{syntax,semantics,results}, feedback:[] }]
+    // Expect each result to have attempts: [{attempt, grade, ts, rubric:{syntax,semantics,results}, feedback:[] }]
     type Attempt = { attempt: number; grade: number; ts?: string; rubric?: { syntax?: number; semantics?: number; results?: number }; feedback?: string[] };
     interface ResultWithAttempts { attempts?: Attempt[] }
     const allAttempts: Attempt[] = [];
@@ -306,7 +306,6 @@ export default function ResultsCharts({ results = [] as any[], loadAttemptsFor, 
                         </CardContent>
                     </Card>
                 </Box>
-                {/* Instructor Survey Analytics moved below other charts */}
                 <InstructorSurveyAnalytics assignmentId={loadAttemptsFor?.assignmentId} />
             </Box>
         );

@@ -27,7 +27,6 @@ export default function Login() {
                     sx={{ pb: 1, textAlign: 'center' }}
                     title={
                         <Box sx={{ display: 'grid', placeItems: 'center' }}>
-                            {/* centered icon above title */}
                             <Logo height={48} variant="default" sx={{ mb: 1 }} />
 
                             <Typography variant="h6" sx={{ fontWeight: 700, mb: 0.5 }}>

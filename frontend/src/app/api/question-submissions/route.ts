@@ -101,7 +101,6 @@ export async function POST(req: NextRequest) {
     }
 }
 
-// PATCH grading update: { id, grade, rubric, feedback, status, incrementAttempt?, noAttemptIncrement? }
 export async function PATCH(req: NextRequest) {
     try {
         await ensureInit();

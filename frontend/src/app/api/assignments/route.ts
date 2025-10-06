@@ -19,8 +19,6 @@ export async function GET(req: Request) {
         if (payload.role === 'student') {
             // Validate that roster row still exists and is Active; deny access otherwise
             // NOTE: For student tokens we encode the roster id in `sub` (see signStudentJwt).
-            // Earlier code incorrectly attempted to read a non-existent `rosterId` claim which
-            // caused all student validation to fail, triggering a silent logout loop.
             const rosterId = payload.sub; // roster id
             if (!rosterId) return NextResponse.json({ error: 'invalid student token' }, { status: 401 });
             const { rows: rosterRows } = await withInstructorContext(instructorId, () => query<{ status: string }>(`SELECT status FROM roster WHERE id=$1 AND owner_id = current_setting('app.current_instructor')::uuid LIMIT 1`, [rosterId]));

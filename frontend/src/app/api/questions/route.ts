@@ -73,7 +73,7 @@ export async function POST(req: NextRequest) {
     }
 }
 
-// PATCH update an existing question
+// update an existing question
 export async function PATCH(req: NextRequest) {
     try {
         await ensureInit();

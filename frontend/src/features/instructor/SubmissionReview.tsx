@@ -1,5 +1,5 @@
 'use client';
-import { Card, CardContent, CardHeader, Table, TableBody, TableCell, TableHead, TableRow, Button, Typography, Collapse, Box, CircularProgress, Chip, Divider, TextField, CardActionArea } from '@mui/material';
+import { Card, CardContent, CardHeader, Table, TableBody, TableCell, TableHead, TableRow, Button, Typography, Collapse, Box, CircularProgress, Chip, Divider, TextField, CardActionArea, Tooltip } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { useEffect, useMemo, useState } from 'react';
 import type { SubmissionWithQuestions, QuestionSubmission, QuestionSubmissionAttempt, Assignment } from '@/lib/types';
@@ -9,6 +9,12 @@ import { DEFAULT_GRADING_OPTIONS } from '@/lib/api';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { useRosterMap } from '@/lib/useRosterMap';
 import PageCard from '@/components/PageCard';
+import TilesGrid from '@/components/TilesGrid';
+import DifficultyChip from '@/components/DifficultyChip';
+import RefreshIcon from '@mui/icons-material/Refresh';
+import CloseFullscreenIcon from '@mui/icons-material/CloseFullscreen';
+import HeaderActionButton from '@/components/HeaderActionButton';
+import HeaderActions from '@/components/HeaderActions';
 import ResultsCharts from '@/components/ResultsCharts';
 import InstructorSubmissionPlayer from '@/features/instructor/InstructorSubmissionPlayer';
 import { formatDateTimeDDMMYYYYHHmm } from '@/lib/format';
@@ -148,153 +154,161 @@ export default function SubmissionReview() {
     }, [assignments, search]);
 
     return (
-        <PageCard>
+        <PageCard
+            headerTitle={<Typography variant='subtitle1'>{selectedAssignment ? 'Submissions' : 'Submissions'}{selectedSubmissionId ? '' : ''}</Typography>}
+            headerProps={{ height: 56 }}
+            headerActionsVariant='plain'
+            headerActions={
+                <HeaderActions
+                    actions={[
+                        selectedSubmissionId ? {
+                            key: 'close-viewer',
+                            label: 'Close viewer',
+                            ariaLabel: 'Close viewer',
+                            onClick: () => setSelectedSubmissionId(null),
+                            icon: <CloseFullscreenIcon fontSize='small' />,
+                        } : null,
+                        selectedAssignment && !selectedSubmissionId ? {
+                            key: 'back',
+                            label: 'Back to quizzes',
+                            ariaLabel: 'Back to quizzes',
+                            onClick: () => setSelectedAssignment(null),
+                            icon: <ArrowBackIcon fontSize='small' />,
+                        } : null,
+                        {
+                            key: 'refresh',
+                            label: 'Refresh',
+                            ariaLabel: 'Refresh',
+                            onClick: () => { if (!selectedAssignment) { setSelectedAssignment(null); } else { setSelectedSubmissionId(null); } },
+                            icon: <RefreshIcon fontSize='small' />,
+                        }
+                    ].filter(Boolean) as any}
+                />
+            }
+        >
             {!selectedAssignment ? (
-                <>
-                    <CardHeader title={<Typography variant='subtitle1'>Submissions</Typography>} />
-                    <CardContent>
-                        <Box sx={{ display: 'flex', gap: 1, mb: 2, flexWrap: 'wrap', alignItems: 'center' }}>
-                            <TextField variant='outlined' size='small' placeholder='Search by title or course' value={search} onChange={e => setSearch(e.target.value)} />
-                            {aError && <Typography variant='caption' color='error'>{aError}</Typography>}
-                        </Box>
-                        <Box sx={{
-                            display: 'grid',
-                            gap: 1.5,
-                            gridTemplateColumns: {
-                                xs: '1fr',
-                                sm: 'repeat(2, 1fr)',
-                                md: 'repeat(3, 1fr)',
-                                lg: 'repeat(4, 1fr)'
-                            }
-                        }}> 
-                            {filteredAssignments.map(a => (
-                                <Card key={a.id} variant='outlined' sx={{ display: 'flex', flexDirection: 'column' }}>
-                                    <CardActionArea onClick={() => setSelectedAssignment(a)} sx={{ alignSelf: 'stretch' }}>
-                                        <CardHeader title={<Typography variant='subtitle1' sx={{ fontWeight: 600, lineHeight: 1.2 }}>{a.title}</Typography>} subheader={<Typography variant='caption' color='text.secondary'>{a.course}</Typography>} />
-                                        <CardContent sx={{ pt: 0, display: 'grid', gap: 1 }}>
-                                            <Box sx={{ display: 'flex', gap: .75, flexWrap: 'wrap' }}>
-                                                <Chip size='small' label={a.difficulty} />
-                                                <Chip size='small' label={`${a.points} pts`} />
-                                                <Chip size='small' variant='outlined' label={`Submissions: ${submissionCounts[a.title] || 0}`} />
-                                            </Box>
-                                            <Typography variant='caption' color='text.secondary'>Due: {a.due || '—'}</Typography>
-                                        </CardContent>
-                                    </CardActionArea>
-                                </Card>
-                            ))}
-                        </Box>
-                        {!filteredAssignments.length && !aLoading && (
-                            <Typography variant='body2' color='text.secondary' sx={{ mt: 2 }}>No quizzes found.</Typography>
-                        )}
-                        {aLoading && (
-                            <Typography variant='body2' color='text.secondary' sx={{ mt: 2 }}>Loading…</Typography>
-                        )}
-                    </CardContent>
-                </>
+                <CardContent>
+                    <Box sx={{ display: 'flex', gap: 1, mb: 2, flexWrap: 'wrap', alignItems: 'center' }}>
+                        <TextField variant='outlined' size='small' placeholder='Search by title or course' value={search} onChange={e => setSearch(e.target.value)} />
+                        {aError && <Typography variant='caption' color='error'>{aError}</Typography>}
+                    </Box>
+                    <TilesGrid>
+                        {filteredAssignments.map(a => (
+                            <Card key={a.id} variant='outlined' sx={{ display: 'flex', flexDirection: 'column', position: 'relative' }}>
+                                <CardActionArea onClick={() => setSelectedAssignment(a)} sx={{ alignSelf: 'stretch' }}>
+                                    <CardHeader title={<Typography variant='subtitle1' sx={{ fontWeight: 600, lineHeight: 1.2 }}>{a.title}</Typography>} subheader={<Typography variant='caption' color='text.secondary'>{a.course}</Typography>} sx={{ pb: 0 }} />
+                                    <CardContent sx={{ pt: 0, display: 'grid', gap: 1 }}>
+                                        <Box sx={{ display: 'flex', gap: .75, flexWrap: 'wrap' }}>
+                                            <DifficultyChip value={a.difficulty} />
+                                            <Chip size='small' variant='outlined' label={`${a.points} pts`} />
+                                            <Chip size='small' variant='outlined' label={`Subs: ${submissionCounts[a.title] || 0}`} />
+                                        </Box>
+                                        <Typography variant='caption' color='text.secondary'>Due: {a.due || '—'}</Typography>
+                                    </CardContent>
+                                </CardActionArea>
+                            </Card>
+                        ))}
+                    </TilesGrid>
+                    {!filteredAssignments.length && !aLoading && (
+                        <Typography variant='body2' color='text.secondary' sx={{ mt: 2 }}>No quizzes found.</Typography>
+                    )}
+                    {aLoading && (
+                        <Typography variant='body2' color='text.secondary' sx={{ mt: 2 }}>Loading…</Typography>
+                    )}
+                </CardContent>
             ) : (
-                <>
-                    <CardHeader title={`Submissions • ${selectedAssignment.title}`} subheader={<>
-                        <Typography variant='caption' color='text.secondary'>{selectedAssignment.course} • Due {selectedAssignment.due} • Attempts {selectedAssignment.attemptsAllowed}</Typography>
-                    </>} action={
-                        selectedSubmissionId ? (
-                            <Button size='small' startIcon={<ArrowBackIcon />} onClick={() => setSelectedSubmissionId(null)}>Back to overview</Button>
-                        ) : (
-                            <Button size='small' startIcon={<ArrowBackIcon />} onClick={() => { setSelectedAssignment(null); }}>Back to quizzes</Button>
-                        )
-                    } />
-                    <CardContent>
-                        {!selectedSubmissionId && (
-                            <>
-                                <Box sx={{ mb: 2 }}>
-                                    <Typography variant='subtitle1' sx={{ mb: 1 }}>Assignment Overview</Typography>
-                                    <ResultsCharts
-                                        results={rows.map(r => ({ Grade: (r as any).grade ?? 0 }))}
-                                        loadAttemptsFor={selectedAssignment ? { assignmentId: selectedAssignment.id, student: (rows[0]?.student || ''), token: user?.token } : undefined}
-                                        onAdvancedChange={(o) => setChartsAdvancedOpen(o)}
-                                    />
-                                </Box>
-                                {!chartsAdvancedOpen && <Divider sx={{ my: 2 }} />}
-                                {!chartsAdvancedOpen && (
-                                    <Table size="small">
-                                        <TableHead>
-                                            <TableRow>
-                                                <TableCell>Student</TableCell>
-                                                <TableCell>Date</TableCell>
-                                                <TableCell>Grade</TableCell>
-                                                <TableCell>Status</TableCell>
-                                                <TableCell>Actions</TableCell>
-                                            </TableRow>
-                                        </TableHead>
-                                        <TableBody>
-                                            {rows.map((s: SubmissionWithQuestions) => (
-                                                <TableRow key={s.id} hover sx={{ cursor: 'pointer' }} onClick={() => {
-                                                    setSelectedSubmissionId(s.id);
-                                                    if (!(s as any).questions) void loadQuestions(s.id);
-                                                }}>
-                                                    <TableCell>{rosterMap[s.student] || s.student}</TableCell>
-                                                    <TableCell>{formatDateTimeDDMMYYYYHHmm(s.date)}</TableCell>
-                                                    <TableCell>{formatGrade((s as any).grade)}</TableCell>
-                                                    <TableCell>{s.status}</TableCell>
-                                                    <TableCell>
-                                                        <Button size='small' sx={{ ml: 0 }} variant='contained' disabled={gradingSub[s.id]?.status === 'loading'} onClick={async (e) => {
-                                                            e.stopPropagation();
-                                                            setGradingSub(m => ({ ...m, [s.id]: { status: 'loading', message: 'Starting grader…' } }));
-                                                            try {
-                                                                const start = await authFetch('/api/grade-submission', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ submissionId: s.id, async: true }) });
-                                                                if (!start.ok) throw new Error('Failed to start grading');
-                                                                const started = await start.json();
-                                                                const jobId: string | undefined = started?.jobId;
-                                                                if (!jobId) throw new Error('No job id');
-                                                                const deadline = Date.now() + 120_000;
-                                                                let final: any = null;
-                                                                while (Date.now() < deadline) {
-                                                                    await new Promise(r => setTimeout(r, 1000));
-                                                                    const poll = await authFetch(`/api/grade-submission?job=${encodeURIComponent(jobId)}`);
-                                                                    if (!poll.ok) continue;
-                                                                    const body = await poll.json();
-                                                                    if (body.status === 'succeeded') { final = body.result; break; }
-                                                                    if (body.status === 'failed') { throw new Error(body.error || 'Grading failed'); }
-                                                                    setGradingSub(m => ({ ...m, [s.id]: { status: 'loading', message: 'Grading in progress…' } }));
-                                                                }
-                                                                if (!final) {
-                                                                    setGradingSub(m => ({ ...m, [s.id]: { status: 'success', message: 'Still processing in background…' } }));
-                                                                    return;
-                                                                }
-                                                                setRows(r => r.map(row => row.id === s.id ? { ...row, grade: (final as any)?.submission?.grade, status: (final as any)?.status || (row as any).status } as any : row));
-                                                                await loadQuestions(s.id);
-                                                                setGradingSub(m => ({ ...m, [s.id]: { status: 'success', message: (final as any)?.status === 'Needs review' ? 'Completed with issues.' : 'Auto-grading complete.' } }));
-                                                            } catch (e: any) {
-                                                                setGradingSub(m => ({ ...m, [s.id]: { status: 'error', message: e?.message || 'Failed' } }));
-                                                            }
-                                                        }}>Auto-Grade</Button>
-                                                        {gradingSub[s.id]?.status !== 'idle' && <Typography variant='caption' color={gradingSub[s.id]?.status === 'error' ? 'error' : 'text.secondary'} sx={{ ml: 1 }}>{gradingSub[s.id]?.message}</Typography>}
-                                                    </TableCell>
-                                                </TableRow>
-                                            ))}
-                                            {!rows.length && !loading && (
-                                                <TableRow><TableCell colSpan={5}>No submissions for this quiz.</TableCell></TableRow>
-                                            )}
-                                            {loading && (
-                                                <TableRow><TableCell colSpan={5}>Loading…</TableCell></TableRow>
-                                            )}
-                                        </TableBody>
-                                    </Table>)}
-                            </>
-                        )}
-                        {selectedSubmissionId && (() => {
-                            const s = rows.find(r => r.id === selectedSubmissionId) as SubmissionWithQuestions | undefined;
-                            if (!s) return <Typography variant='body2'>Submission not found.</Typography>;
-                            return (
-                                <InstructorSubmissionPlayer
-                                    assignmentId={selectedAssignment?.id || null}
-                                    submission={s as any}
-                                    onClose={() => setSelectedSubmissionId(null)}
+                <CardContent>
+                    <Typography variant='caption' color='text.secondary' sx={{ display: 'block', mb: 1 }}>{selectedAssignment.course} • Due {selectedAssignment.due} • Attempts {selectedAssignment.attemptsAllowed}</Typography>
+                    {!selectedSubmissionId && (
+                        <>
+                            <Box sx={{ mb: 2 }}>
+                                <Typography variant='subtitle1' sx={{ mb: 1 }}>Assignment Overview</Typography>
+                                <ResultsCharts
+                                    results={rows.map(r => ({ Grade: (r as any).grade ?? 0 }))}
+                                    loadAttemptsFor={selectedAssignment ? { assignmentId: selectedAssignment.id, student: (rows[0]?.student || ''), token: user?.token } : undefined}
+                                    onAdvancedChange={(o) => setChartsAdvancedOpen(o)}
                                 />
-                            );
-                        })()}
-                    </CardContent>
-
-                </>
+                            </Box>
+                            {!chartsAdvancedOpen && <Divider sx={{ my: 2 }} />}
+                            {!chartsAdvancedOpen && (
+                                <Table size="small">
+                                    <TableHead>
+                                        <TableRow>
+                                            <TableCell>Student</TableCell>
+                                            <TableCell>Date</TableCell>
+                                            <TableCell>Grade</TableCell>
+                                            <TableCell>Status</TableCell>
+                                            <TableCell>Actions</TableCell>
+                                        </TableRow>
+                                    </TableHead>
+                                    <TableBody>
+                                        {rows.map((s: SubmissionWithQuestions) => (
+                                            <TableRow key={s.id} hover sx={{ cursor: 'pointer' }} onClick={() => {
+                                                setSelectedSubmissionId(s.id);
+                                                if (!(s as any).questions) void loadQuestions(s.id);
+                                            }}>
+                                                <TableCell>{rosterMap[s.student] || s.student}</TableCell>
+                                                <TableCell>{formatDateTimeDDMMYYYYHHmm(s.date)}</TableCell>
+                                                <TableCell>{formatGrade((s as any).grade)}</TableCell>
+                                                <TableCell>{s.status}</TableCell>
+                                                <TableCell>
+                                                    <Button size='small' sx={{ ml: 0 }} variant='contained' disabled={gradingSub[s.id]?.status === 'loading'} onClick={async (e) => {
+                                                        e.stopPropagation();
+                                                        setGradingSub(m => ({ ...m, [s.id]: { status: 'loading', message: 'Starting grader…' } }));
+                                                        try {
+                                                            const start = await authFetch('/api/grade-submission', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ submissionId: s.id, async: true }) });
+                                                            if (!start.ok) throw new Error('Failed to start grading');
+                                                            const started = await start.json();
+                                                            const jobId: string | undefined = started?.jobId;
+                                                            if (!jobId) throw new Error('No job id');
+                                                            const deadline = Date.now() + 120_000;
+                                                            let final: any = null;
+                                                            while (Date.now() < deadline) {
+                                                                await new Promise(r => setTimeout(r, 1000));
+                                                                const poll = await authFetch(`/api/grade-submission?job=${encodeURIComponent(jobId)}`);
+                                                                if (!poll.ok) continue;
+                                                                const body = await poll.json();
+                                                                if (body.status === 'succeeded') { final = body.result; break; }
+                                                                if (body.status === 'failed') { throw new Error(body.error || 'Grading failed'); }
+                                                                setGradingSub(m => ({ ...m, [s.id]: { status: 'loading', message: 'Grading in progress…' } }));
+                                                            }
+                                                            if (!final) {
+                                                                setGradingSub(m => ({ ...m, [s.id]: { status: 'success', message: 'Still processing in background…' } }));
+                                                                return;
+                                                            }
+                                                            setRows(r => r.map(row => row.id === s.id ? { ...row, grade: (final as any)?.submission?.grade, status: (final as any)?.status || (row as any).status } as any : row));
+                                                            await loadQuestions(s.id);
+                                                            setGradingSub(m => ({ ...m, [s.id]: { status: 'success', message: (final as any)?.status === 'Needs review' ? 'Completed with issues.' : 'Auto-grading complete.' } }));
+                                                        } catch (e: any) {
+                                                            setGradingSub(m => ({ ...m, [s.id]: { status: 'error', message: e?.message || 'Failed' } }));
+                                                        }
+                                                    }}>Auto-Grade</Button>
+                                                    {gradingSub[s.id]?.status !== 'idle' && <Typography variant='caption' color={gradingSub[s.id]?.status === 'error' ? 'error' : 'text.secondary'} sx={{ ml: 1 }}>{gradingSub[s.id]?.message}</Typography>}
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                        {!rows.length && !loading && (
+                                            <TableRow><TableCell colSpan={5}>No submissions for this quiz.</TableCell></TableRow>
+                                        )}
+                                        {loading && (
+                                            <TableRow><TableCell colSpan={5}>Loading…</TableCell></TableRow>
+                                        )}
+                                    </TableBody>
+                                </Table>)}
+                        </>
+                    )}
+                    {selectedSubmissionId && (() => {
+                        const s = rows.find(r => r.id === selectedSubmissionId) as SubmissionWithQuestions | undefined;
+                        if (!s) return <Typography variant='body2'>Submission not found.</Typography>;
+                        return (
+                            <InstructorSubmissionPlayer
+                                assignmentId={selectedAssignment?.id || null}
+                                submission={s as any}
+                                onClose={() => setSelectedSubmissionId(null)}
+                            />
+                        );
+                    })()}
+                </CardContent>
             )}
         </PageCard>
     );

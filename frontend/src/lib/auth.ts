@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 
 // Lightweight HMAC-SHA256 JWT implementation (HS256) without external deps
-// NOTE: For production, rotate secrets.
+// NOTE: For production WE rotate secrets.
 
 const ALG = 'HS256';
 const TYP = 'JWT';

@@ -2,16 +2,11 @@
 import { useEffect, useState, useMemo } from 'react';
 import {
     Box,
-    Card,
-    CardHeader,
-    CardContent,
-    CardActions,
     Typography,
     TextField,
     Button,
     IconButton,
     Chip,
-    Divider,
     MenuItem,
     CircularProgress,
     Tooltip,
@@ -22,20 +17,17 @@ import {
     DialogContent,
     DialogActions,
     LinearProgress,
-    CardActionArea,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import RefreshIcon from '@mui/icons-material/Refresh';
-import ManageSearchIcon from '@mui/icons-material/ManageSearch';
 import type { Assignment, AssignmentWithQuestions, NewAssignmentPayload } from '@/lib/types';
 import { useAuth } from '@/features/auth/AuthProvider';
-import AssignmentQuestionPicker from './AssignmentQuestionPicker';
+import AssignmentQuestionPicker, { AssignmentQuestionPickerHandle } from './AssignmentQuestionPicker';
 import { LocalizationProvider, DatePicker } from '@mui/x-date-pickers';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import dayjs, { Dayjs } from 'dayjs';
-import VisibilityIcon from '@mui/icons-material/Visibility';
 import StudentAssignmentPlayer from '@/features/student/StudentAssignmentPlayer';
-import { useTheme, alpha } from '@mui/material/styles';
+import { useTheme } from '@mui/material/styles';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import { ListItemIcon, ListItemText } from '@mui/material';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
@@ -44,14 +36,13 @@ import EditIcon from '@mui/icons-material/Edit';
 import DeleteForeverIcon from '@mui/icons-material/DeleteForever';
 import Menu from '@mui/material/Menu';
 import PageCard from '@/components/PageCard';
+import TilesGrid from '@/components/TilesGrid';
+import HeaderActionButton from '@/components/HeaderActionButton';
+import HeaderActions from '@/components/HeaderActions';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import SaveIcon from '@mui/icons-material/Save';
+import DifficultyChip from '@/components/DifficultyChip';
 
-// Helper (kept for potential future use; currently not used)
-async function fetchJson(url: string, init?: RequestInit) {
-    const res = await fetch(url, init);
-    const data = await res.json();
-    if (!res.ok) throw new Error(data?.error || 'Request failed');
-    return data;
-}
 
 export default function AssignmentQuestionManager() {
     const { authFetch, user } = useAuth();
@@ -60,7 +51,7 @@ export default function AssignmentQuestionManager() {
     const [creating, setCreating] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [note, setNote] = useState<string | null>(null);
-    const [selectedId, setSelectedId] = useState<string | null>(null); // card click selection
+    const [selectedId, setSelectedId] = useState<string | null>(null); // selected assignment for linking questions
     const [actionTargetId, setActionTargetId] = useState<string | null>(null); // overflow menu target
     const [editingId, setEditingId] = useState<string | null>(null);
     const [actionAnchor, setActionAnchor] = useState<null | HTMLElement>(null);
@@ -92,6 +83,8 @@ export default function AssignmentQuestionManager() {
     const [attemptsAllowed, setAttemptsAllowed] = useState<number>(3);
 
     const selected = useMemo<Assignment | AssignmentWithQuestions | null>(() => assignments.find(a => a.id === selectedId) || null, [assignments, selectedId]);
+    const [pickerMode, setPickerMode] = useState(false);
+    const pickerRef = useState<AssignmentQuestionPickerHandle | null>(null)[0] as any;
 
     async function loadAssignments(includeQuestions = false) {
         if (!user?.token) return; // wait for auth
@@ -248,101 +241,140 @@ export default function AssignmentQuestionManager() {
         } catch { setPreviewAssignment(a); } finally { setPreviewLoading(false); }
     }
 
+    const headerActions = (
+        <>
+            {view === 'list' && !pickerMode && (
+                <HeaderActions
+                    actions={[
+                        { key: 'add', ariaLabel: 'Add assignment', title: 'Add assignment', icon: <AddIcon fontSize='small' />, onClick: startCreate },
+                        { key: 'reload', ariaLabel: 'Reload assignments', title: 'Reload assignments', icon: <RefreshIcon fontSize='small' />, onClick: () => loadAssignments(), disabled: loading }
+                    ]}
+                />
+            )}
+            {view === 'editor' && !pickerMode && (
+                <HeaderActionButton onClick={() => { setView('list'); setEditingId(null); }} aria-label='Back to list' title='Back to list'>
+                    <ArrowBackIcon fontSize='small' />
+                </HeaderActionButton>
+            )}
+            {pickerMode && (
+                <HeaderActions
+                    actions={[
+                        { key: 'back', ariaLabel: 'Back to assignments', title: 'Back to assignments', icon: <ArrowBackIcon fontSize='small' />, onClick: () => setPickerMode(false) },
+                        { key: 'save', ariaLabel: 'Save changes', title: 'Save changes', icon: <SaveIcon fontSize='small' />, onClick: () => pickerRef?.save?.() }
+                    ]}
+                />
+            )}
+        </>
+    );
+
+    const pageTitle = pickerMode ? `Assignment Questions${selected ? ': ' + selected.title : ''}` : (view === 'editor' ? (editingId ? 'Edit Assignment' : 'Create Assignment') : 'Assignments');
+
     return (
         <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale='en-gb'>
-            {!selected ? (
-                view === 'editor' ? (
-                    <PageCard>
-                        <Card>
-                            <CardHeader
-                                sx={{ pb: 1 }}
-                                title={<Typography variant='subtitle1' fontWeight={600}>{editingId ? 'Edit Assignment' : 'Create Assignment'}</Typography>}
-                                action={<Box sx={{ display: 'flex', gap: 1 }}>
-                                    <Button variant='outlined' size='small' onClick={() => setView('list')}>Back to list</Button>
-                                    <Button startIcon={<AddIcon />} variant='contained' size='small' onClick={startCreate}>New</Button>
-                                </Box>}
-                            />
-                            <CardContent sx={{ pt: 0 }}>
-                                <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: { sm: 'repeat(2,1fr)', xs: '1fr' } }}>
-                                    <TextField label='Title' value={title} onChange={e => setTitle(e.target.value)} variant='outlined' size='small' fullWidth required />
-                                    <TextField label='Course' value={course} onChange={e => setCourse(e.target.value)} variant='outlined' size='small' fullWidth />
-                                    <TextField label='Difficulty' value={difficulty} onChange={e => setDifficulty(e.target.value)} select size='small'>
-                                        {['Beginner', 'Intermediate', 'Advanced'].map(d => <MenuItem key={d} value={d}>{d}</MenuItem>)}
-                                    </TextField>
-                                    <TextField label='Points' type='number' value={points} onChange={e => setPoints(Number(e.target.value || 0))} variant='outlined' size='small' />
-                                    <DatePicker label='Due' value={dueDayjs} onChange={(v: Dayjs | null) => setDue(v ? v.format('DD-MM-YYYY') : '')} format='DD-MM-YYYY' slotProps={{ textField: { size: 'small', variant: 'outlined', placeholder: '31-12-2025' } }} />
-                                    <TextField label='Tags (comma)' value={tags} onChange={e => setTags(e.target.value)} variant='outlined' size='small' />
-                                    <TextField label='Attempts allowed' type='number' value={attemptsAllowed} onChange={e => setAttemptsAllowed(Math.max(1, Math.floor(Number(e.target.value) || 1)))} variant='outlined' size='small' inputProps={{ min: 1, step: 1 }} />
-                                </Box>
-                                {error && <Typography variant='caption' color='error' sx={{ mt: 1, display: 'block' }}>{error}</Typography>}
-                            </CardContent>
-                            <CardActions sx={{ justifyContent: 'space-between' }}>
-                                <Box />
-                                <Box sx={{ display: 'flex', gap: 1 }}>
-                                    <Button variant='outlined' size='small' onClick={() => { setEditingId(null); setView('list'); }}>Cancel</Button>
-                                    {editingId ? (
-                                        <Button variant='contained' size='small' onClick={saveEdit} disabled={!title.trim()}>Update</Button>
-                                    ) : (
-                                        <Button variant='contained' size='small' onClick={createAssignment} disabled={creating || !title.trim()}>{creating ? 'Creating…' : 'Create'}</Button>
-                                    )}
-                                </Box>
-                            </CardActions>
-                        </Card>
-                    </PageCard>
+            <PageCard
+                headerTitle={pageTitle}
+                headerProps={{ height: 56 }}
+                headerActions={headerActions}
+                headerActionsVariant='plain'
+            >
+                {pickerMode ? (
+                    <AssignmentQuestionPicker assignment={selected} ref={pickerRef} onClose={() => setPickerMode(false)} />
+                ) : view === 'editor' ? (
+                    <Box sx={{ p: { xs: 1.5, md: 2 }, borderRadius: 2, bgcolor: 'transparent' }}>
+                        <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: { sm: 'repeat(2,1fr)', xs: '1fr' } }}>
+                            <TextField label='Title' value={title} onChange={e => setTitle(e.target.value)} variant='outlined' size='small' fullWidth required />
+                            <TextField label='Course' value={course} onChange={e => setCourse(e.target.value)} variant='outlined' size='small' fullWidth />
+                            <TextField label='Difficulty' value={difficulty} onChange={e => setDifficulty(e.target.value)} select size='small'>
+                                {['Beginner', 'Intermediate', 'Advanced'].map(d => <MenuItem key={d} value={d}>{d}</MenuItem>)}
+                            </TextField>
+                            <TextField label='Points' type='number' value={points} onChange={e => setPoints(Number(e.target.value || 0))} variant='outlined' size='small' />
+                            <DatePicker label='Due' value={dueDayjs} onChange={(v: Dayjs | null) => setDue(v ? v.format('DD-MM-YYYY') : '')} format='DD-MM-YYYY' slotProps={{ textField: { size: 'small', variant: 'outlined', placeholder: '31-12-2025' } }} />
+                            <TextField label='Tags (comma)' value={tags} onChange={e => setTags(e.target.value)} variant='outlined' size='small' />
+                            <TextField label='Attempts allowed' type='number' value={attemptsAllowed} onChange={e => setAttemptsAllowed(Math.max(1, Math.floor(Number(e.target.value) || 1)))} variant='outlined' size='small' inputProps={{ min: 1, step: 1 }} />
+                        </Box>
+                        {error && <Typography variant='caption' color='error' sx={{ mt: 1, display: 'block' }}>{error}</Typography>}
+                        <Box sx={{ mt: 2, display: 'flex', justifyContent: 'flex-end', gap: 1, flexWrap: 'wrap' }}>
+                            <Button variant='outlined' size='small' onClick={() => { setEditingId(null); setView('list'); }}>Cancel</Button>
+                            {editingId ? (
+                                <Button variant='contained' size='small' onClick={saveEdit} disabled={!title.trim()}>Update</Button>
+                            ) : (
+                                <Button variant='contained' size='small' onClick={createAssignment} disabled={creating || !title.trim()}>{creating ? 'Creating…' : 'Create'}</Button>
+                            )}
+                        </Box>
+                    </Box>
                 ) : (
-                    <PageCard>
-                        <CardHeader title={<Typography variant='subtitle1'>Assignments</Typography>} />
-                        <CardContent>
-                            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', mb: 2, flexWrap: 'wrap' }}>
-                                <TextField
-                                    label='Search assignments'
-                                    placeholder='Title, course, tag'
-                                    value={filter}
-                                    onChange={e => setFilter(e.target.value)}
-                                    variant='outlined'
-                                    size='small'
-                                />
-                                <Button startIcon={<AddIcon />} variant='contained' size='small' onClick={startCreate}>Create assignment</Button>
-                                <Tooltip title="Reload"><span><IconButton onClick={() => loadAssignments()} disabled={loading}><RefreshIcon /></IconButton></span></Tooltip>
-                            </Box>
-                            {loading && <Box sx={{ py: 3, textAlign: 'center' }}><CircularProgress size={26} /></Box>}
-                            {!loading && (
-                                <Box sx={{
-                                    display: 'grid', gap: 1.5,
-                                    gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)', lg: 'repeat(4, 1fr)' }
-                                }}>
-                                    {filteredAssignments.map(a => (
-                                        <Card key={a.id} variant='outlined' sx={{ display: 'flex', flexDirection: 'column', position: 'relative' }}>
-                                            <CardActionArea onClick={() => setSelectedId(a.id)} sx={{ alignSelf: 'stretch' }}>
-                                                <CardHeader
-                                                    title={<Typography variant='subtitle1' sx={{ fontWeight: 600, lineHeight: 1.2 }}>{a.title}</Typography>}
-                                                    subheader={<Typography variant='caption' color='text.secondary'>{a.course}</Typography>}
-                                                />
-                                                <CardContent sx={{ pt: 0, display: 'grid', gap: 1 }}>
-                                                    <Box sx={{ display: 'flex', gap: .75, flexWrap: 'wrap' }}>
-                                                        <Chip size='small' label={a.difficulty} />
-                                                        <Chip size='small' label={`${a.points} pts`} />
-                                                        <Chip size='small' variant='outlined' label={`Attempts: ${(a as any).attemptsAllowed ?? 3}`} />
-                                                    </Box>
-                                                    <Typography variant='caption' color='text.secondary'>Due: {a.due || '—'}</Typography>
-                                                </CardContent>
-                                            </CardActionArea>
-                                            <Box sx={{ position: 'absolute', top: 4, right: 4 }}>
-                                                <Tooltip title='Actions'>
-                                                    <IconButton size='small' onClick={(e) => openActions(e, a)} aria-label={`Actions for ${a.title}`}>
-                                                        <MoreVertIcon fontSize='small' />
-                                                    </IconButton>
-                                                </Tooltip>
+                    <Box sx={{ p: { xs: 1.5, md: 2 }, pt: 2 }}>
+                        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', mb: 2, flexWrap: 'wrap' }}>
+                            <TextField
+                                label='Search assignments'
+                                placeholder='Title, course, tag'
+                                value={filter}
+                                onChange={e => setFilter(e.target.value)}
+                                variant='outlined'
+                                size='small'
+                            />
+                        </Box>
+                        {loading && <Box sx={{ py: 3, textAlign: 'center' }}><CircularProgress size={26} /></Box>}
+                        {!loading && (
+                            <TilesGrid>
+                                {filteredAssignments.map(a => (
+                                    <Box
+                                        key={a.id}
+                                        role='button'
+                                        tabIndex={0}
+                                        onClick={() => { setSelectedId(a.id); setPickerMode(true); }}
+                                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedId(a.id); setPickerMode(true); } }}
+                                        sx={(theme) => ({
+                                            position: 'relative',
+                                            p: 1.25,
+                                            borderRadius: 1.25,
+                                            cursor: 'pointer',
+                                            display: 'grid',
+                                            gap: 0.75,
+                                            minHeight: 108,
+                                            background: theme.palette.mode === 'dark'
+                                                ? 'rgba(255,255,255,0.03)'
+                                                : 'linear-gradient(145deg,#ffffff,#f9f9f9)',
+                                            border: '1px solid',
+                                            borderColor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
+                                            boxShadow: '0 1px 2px rgba(0,0,0,0.08)',
+                                            transition: 'background .25s, box-shadow .25s, transform .25s, border-color .25s',
+                                            outline: 'none',
+                                            '&:hover': {
+                                                boxShadow: '0 4px 12px -2px rgba(0,0,0,0.25)',
+                                                transform: 'translateY(-2px)',
+                                                borderColor: 'primary.light'
+                                            },
+                                            '&:focus-visible': {
+                                                boxShadow: '0 0 0 2px #fff, 0 0 0 4px #ff66c4',
+                                            }
+                                        })}
+                                    >
+                                        <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1 }}>
+                                            <Box sx={{ flex: 1, minWidth: 0 }}>
+                                                <Typography variant='subtitle2' sx={{ fontWeight: 600, lineHeight: 1.2, pr: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.title}</Typography>
+                                                <Typography variant='caption' color='text.secondary'>{a.course}</Typography>
                                             </Box>
-                                        </Card>
-                                    ))}
-                                </Box>
-                            )}
-                            {!loading && !filteredAssignments.length && (
-                                <Typography variant='body2' color='text.secondary' sx={{ mt: 2 }}>No assignments found.</Typography>
-                            )}
-                            {error && <Typography variant='caption' color='error' sx={{ mt: 1 }}>{error}</Typography>}
-                        </CardContent>
+                                            <Tooltip title='Actions'>
+                                                <IconButton size='small' onClick={(e) => { e.stopPropagation(); openActions(e, a); }} aria-label={`Actions for ${a.title}`}>
+                                                    <MoreVertIcon fontSize='small' />
+                                                </IconButton>
+                                            </Tooltip>
+                                        </Box>
+                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6, flexWrap: 'wrap' }}>
+                                            <DifficultyChip value={a.difficulty} />
+                                            <Chip size='small' label={`${a.points} pts`} variant='outlined' />
+                                            <Chip size='small' label={`Attempts: ${(a as any).attemptsAllowed ?? 3}`} variant='outlined' />
+                                            <Chip size='small' label={`Due: ${a.due || '—'}`} variant='outlined' />
+                                        </Box>
+                                    </Box>
+                                ))}
+                            </TilesGrid>
+                        )}
+                        {!loading && !filteredAssignments.length && (
+                            <Typography variant='body2' color='text.secondary' sx={{ mt: 2 }}>No assignments found.</Typography>
+                        )}
+                        {error && <Typography variant='caption' color='error' sx={{ mt: 1 }}>{error}</Typography>}
                         {/* Overflow actions menu (stays outside grid mapping) */}
                         <Menu
                             anchorEl={actionAnchor}
@@ -381,13 +413,9 @@ export default function AssignmentQuestionManager() {
                                 <ListItemText primaryTypographyProps={{ color: 'error.main' }}>Delete</ListItemText>
                             </MenuItem>
                         </Menu>
-                    </PageCard>
-                )
-            ) : (
-                <>
-                    <AssignmentQuestionPicker assignment={selected} onClose={() => setSelectedId(null)} />
-                </>
-            )}
+                    </Box>
+                )}
+            </PageCard>
 
             <Snackbar open={!!note} autoHideDuration={2800} onClose={() => setNote(null)} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
                 {!!note ? <Alert severity='success' variant='filled' onClose={() => setNote(null)}>{note}</Alert> : undefined}

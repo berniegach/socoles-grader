@@ -1,8 +1,7 @@
 "use client";
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
-import { Box, Card, CardHeader, CardContent, CardActions, Typography, Button, Chip, LinearProgress, Tabs, Tab, Divider, Collapse, CircularProgress } from '@mui/material';
+import { Box, Card, CardHeader, CardContent, CardActions, Typography, Button, Chip, Tabs, Tab, Divider, Collapse, CircularProgress } from '@mui/material';
 import { formatDateTimeDDMMYYYYHHmm } from '@/lib/format';
-import SafeRichText from '@/components/SafeRichText';
 import SqlEditor from '@/components/SqlEditor';
 import PromptWithHint from '@/components/PromptWithHint';
 import SchemaPreview from '@/components/SchemaPreview';
@@ -27,8 +26,6 @@ interface PlayerProps {
 interface LinkedQuestion { id: string; title: string; difficulty: string; status: string; attempts: number; maxPoints: number; position: number; pointsOverride?: number | null }
 
 export default function StudentAssignmentPlayer({ assignmentId, onClose, onSubmitted, previewMode = false }: PlayerProps) {
-    // Helper to format grades consistently
-    const formatGrade = (g: number | null | undefined) => (typeof g === 'number' && isFinite(g) ? g.toFixed(2) : '—');
 
     const [assignment, setAssignment] = useState<AssignmentWithQuestions | null>(null);
     const [loading, setLoading] = useState(false);

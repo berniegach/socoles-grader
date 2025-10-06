@@ -1,4 +1,5 @@
 import { Box, Card, CardContent, Typography, Chip } from '@mui/material';
+import TilesGrid from '@/components/TilesGrid';
 import React from 'react';
 import { useTheme, alpha } from '@mui/material/styles';
 
@@ -48,9 +49,5 @@ const MetricCard: React.FC<MetricCardProps> = ({ label, value, icon, helper, del
 
 interface MetricsRowProps { metrics: Array<MetricCardProps>; }
 export const MetricsRow: React.FC<MetricsRowProps> = ({ metrics }) => {
-    return (
-        <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr 1fr', md: 'repeat(4, 1fr)' } }}>
-            {metrics.map(m => <MetricCard key={m.label} {...m} />)}
-        </Box>
-    );
+    return <TilesGrid columns={{ xs: 2, md: 4 }} gapSize={2}>{metrics.map(m => <MetricCard key={m.label} {...m} />)}</TilesGrid>;
 };

@@ -10,7 +10,6 @@ import CloudUploadIcon from '@mui/icons-material/CloudUploadOutlined';
 import SettingsIcon from '@mui/icons-material/SettingsOutlined';
 import StorageIcon from '@mui/icons-material/StorageOutlined';
 import LogoutIcon from '@mui/icons-material/Logout';
-// import SentimentSatisfiedAltIcon from '@mui/icons-material/SentimentSatisfiedAlt';
 
 import { useAuth } from '@/features/auth/AuthProvider';
 import StudentArea from '@/features/student/StudentArea';

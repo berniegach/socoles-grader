@@ -1,9 +1,8 @@
 'use client';
 import Grid from '@mui/material/Grid';
-import { Card, CardHeader, CardContent, CardActions, Typography, TextField, Button, Alert, LinearProgress } from '@mui/material';
+import { Card, CardHeader, CardContent, CardActions, Typography, TextField, Button, Alert, LinearProgress, Box } from '@mui/material';
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/features/auth/AuthProvider';
-import PageCard from '@/components/PageCard';
 
 export default function StudentProfile() {
     const { user, authFetch } = useAuth();
@@ -54,7 +53,7 @@ export default function StudentProfile() {
     }
 
     return (
-        <PageCard>
+        <Box sx={{ display: 'grid', gap: 2 }}>
             <Grid container spacing={2}>
                 <Grid size={12}>
                     <Card>
@@ -98,6 +97,6 @@ export default function StudentProfile() {
                     </Card>
                 </Grid>
             </Grid>
-        </PageCard>
+        </Box>
     );
 }

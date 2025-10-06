@@ -3,7 +3,7 @@ import { query, ensureInstructorTables } from '@/lib/db';
 import { signJwt, verifyJwt, parseAuthHeader } from '@/lib/auth';
 import bcrypt from 'bcryptjs';
 
-// POST /api/auth { email, name, password } -> simplistic local auth (no hashing for demo) returns JWT
+// POST /api/auth { email, name, password } 
 // GET /api/auth (with Authorization) -> validate token / refresh
 
 export async function POST(req: NextRequest) {

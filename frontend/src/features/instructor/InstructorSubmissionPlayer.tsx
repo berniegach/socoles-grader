@@ -9,6 +9,7 @@ import FeedbackList from '@/components/FeedbackList';
 import GradeDisplay from '@/components/GradeDisplay';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
+import DifficultyChip from '@/components/DifficultyChip';
 import type { AssignmentWithQuestions, QuestionSubmission, QuestionSubmissionAttempt } from '@/lib/types';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { useRosterMap } from '@/lib/useRosterMap';
@@ -17,10 +18,10 @@ import { formatDateTimeDDMMYYYYHHmm } from '@/lib/format';
 interface Props {
     assignmentId: string | null;
     submission: { id: string; student: string } & Record<string, any>;
-    onClose: () => void; // called when leaving the viewer
+    onClose: () => void; // parent already handles close; no extra PageCard wrapper here
 }
 
-export default function InstructorSubmissionPlayer({ assignmentId, submission, onClose: _onClose }: Props) {
+export default function InstructorSubmissionPlayer({ assignmentId, submission, onClose }: Props) {
     const { authFetch, user } = useAuth();
     const rosterMap = useRosterMap();
     const [assignment, setAssignment] = useState<AssignmentWithQuestions | null>(null);
@@ -118,12 +119,13 @@ export default function InstructorSubmissionPlayer({ assignmentId, submission, o
     const idx = Math.min(Math.max(activeIdx, 0), Math.max(0, total - 1));
 
     return (
-        <Card variant='outlined'>
+        <Card sx={{ display: 'flex', flexDirection: 'column' }}>
             <CardHeader
                 title={<Typography variant='subtitle1'>{assignment?.title || 'Assignment'}</Typography>}
                 subheader={<Typography variant='caption' color='text.secondary'>Question {idx + 1} of {total} • {rosterMap[submission.student] || submission.student}</Typography>}
             />
-            <CardContent sx={{ display: 'grid', gap: 2, gridTemplateColumns: { lg: '1fr 340px' } }}>
+            <CardContent sx={{ pt: 0, display: 'grid', gap: 2, gridTemplateColumns: { lg: '1fr 340px' } }}>
+                {/* meta moved to CardHeader subheader */}
                 <Box>
                     <Typography variant='subtitle2' sx={{ mb: .5 }}>{activeQuestion?.title || activeQuestion?.questionId}</Typography>
                     <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 1 }}>
@@ -131,8 +133,8 @@ export default function InstructorSubmissionPlayer({ assignmentId, submission, o
                             const meta = assignment?.questions?.find(q => q.id === (activeQuestion as any)?.questionId);
                             return (
                                 <>
-                                    <Chip size='small' label={meta?.difficulty || activeQuestion?.status || '—'} />
-                                    <Chip size='small' label={`${meta?.pointsOverride != null ? meta.pointsOverride : meta?.maxPoints || '—'} pts`} />
+                                    {!!(meta?.difficulty || activeQuestion?.status) && <DifficultyChip value={meta?.difficulty || activeQuestion?.status} />}
+                                    <Chip size='small' variant='outlined' label={`${meta?.pointsOverride != null ? meta.pointsOverride : meta?.maxPoints || '—'} pts`} />
                                 </>
                             );
                         })()}
@@ -172,8 +174,8 @@ export default function InstructorSubmissionPlayer({ assignmentId, submission, o
                     )}
                 </Box>
                 <Box sx={{ display: 'grid', gap: 2 }}>
-                    <Card variant='outlined'>
-                        <CardContent>
+                    <Card variant='outlined' sx={{ '&:first-of-type': { mt: { xs: 1, lg: 0 } } }}>
+                        <CardContent sx={{ pb: 1.5 }}>
                             <GradeDisplay grade={typeof currentAttempt?.grade === 'number' ? currentAttempt.grade : null} denom={typeof currentAttempt?.grade === 'number' ? ((currentAttempt.grade <= 1) ? 1 : 10) : null} />
                             <Divider sx={{ my: 1.5 }} />
                             <RubricBars rubric={{
@@ -218,18 +220,21 @@ export default function InstructorSubmissionPlayer({ assignmentId, submission, o
                             </Box>
                         </CardContent>
                     </Card>
+                    <Box sx={{ p: 1, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
+                        <Typography variant='caption' color='text.secondary'>Submission {String(submission.id).substring(0, 8)}</Typography>
+                    </Box>
                     <Card variant='outlined'>
                         <CardContent>
                             <Box sx={{ display: 'flex', gap: 1, justifyContent: 'space-between' }}>
                                 <Button size='small' startIcon={<ArrowBackIcon />} disabled={idx === 0} onClick={() => setActiveIdx(i => Math.max(i - 1, 0))}>Previous</Button>
                                 <Button size='small' endIcon={<ArrowForwardIcon />} disabled={idx === (total - 1)} onClick={() => setActiveIdx(i => Math.min(i + 1, total - 1))}>Next</Button>
                             </Box>
-                            <Typography variant='caption' color='text.secondary' sx={{ display: 'block', mt: 1 }}>Navigate through questions. Submission {String(submission.id).substring(0, 8)}</Typography>
+                            <Typography variant='caption' color='text.secondary' sx={{ display: 'block', mt: 1 }}>Navigate questions.</Typography>
                         </CardContent>
                     </Card>
                 </Box>
             </CardContent>
-            <CardActions sx={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 1 }}>
+            <CardActions sx={{ justifyContent: 'flex-start', flexWrap: 'wrap', gap: 1 }}>
                 <Typography variant='caption' color='text.secondary'>Progress {idx + 1}/{total} • Read-only</Typography>
             </CardActions>
         </Card>

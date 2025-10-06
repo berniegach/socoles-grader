@@ -1,7 +1,6 @@
 'use client';
 import { useState, useRef, useMemo } from 'react';
-import { Box, Button, Card, CardContent, CardHeader, Typography, Paper, Snackbar, Alert, Chip, Stack, LinearProgress } from '@mui/material';
-import UploadFileIcon from '@mui/icons-material/UploadFile';
+import { Box, Button, Card, CardContent, CardHeader, Typography, Snackbar, Alert, Chip, Stack, LinearProgress } from '@mui/material';
 import TuneIcon from '@mui/icons-material/Tune';
 import BarChartIcon from '@mui/icons-material/BarChart';
 import TableChartIcon from '@mui/icons-material/TableChart';
@@ -15,6 +14,7 @@ import Papa from 'papaparse';
 import GradingOptions from '@/features/instructor/GradingOptions';
 import type { GradingOptions as GradingOptionsType } from '@/lib/types';
 import PageCard from '@/components/PageCard';
+import HeaderActions from '@/components/HeaderActions';
 
 export default function BatchGrader() {
     const gradingDefaults = useMemo(() => {
@@ -164,10 +164,38 @@ export default function BatchGrader() {
     const allFilesReady = !!studentCsv && !!refCsv; // init SQL optional
     const canRun = !busy && allFilesReady && isOptionsValid(options) && !!selectedQuestionNumber;
 
+    const headerActions = (
+        <HeaderActions
+            actions={[
+                {
+                    key: 'reset',
+                    label: 'Reset batch grader',
+                    ariaLabel: 'Reset',
+                    onClick: resetAll,
+                    disabled: busy,
+                    icon: <RestartAltIcon fontSize='small' />,
+                },
+                {
+                    key: 'run',
+                    label: 'Run grader',
+                    ariaLabel: 'Run grader',
+                    onClick: runBatch,
+                    disabled: !canRun,
+                    icon: <PlayArrowIcon fontSize='small' />,
+                    emphasis: 'high',
+                },
+            ]}
+        />
+    );
+
     return (
         <>
-            <PageCard>
-                <Typography variant="subtitle1" sx={{ mb: 2 }}>Batch Grader</Typography>
+            <PageCard headerTitle='Batch Grader' headerProps={{ height: 56 }} headerActions={headerActions} headerActionsVariant='plain' loadingProgress={busy}>
+                <Box sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                    <Chip size="small" label={allFilesReady ? 'Files ready' : 'Waiting for files'} color={allFilesReady ? 'success' : 'default'} />
+                    <Chip size="small" label={selectedQuestionNumber ? `Q ${selectedQuestionNumber}` : 'No question selected'} color={selectedQuestionNumber ? 'info' : 'default'} />
+                    {results.length > 0 && <Chip size="small" label={`${results.length} results`} />}
+                </Box>
 
                 <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '380px 1fr' }, gap: 2, alignItems: 'start' }}>
                     {/* Left column: Uploads + Options */}
@@ -239,20 +267,6 @@ export default function BatchGrader() {
                     </Box>
                 </Box>
             </PageCard>
-            {/* Sticky action bar */}
-            <Paper elevation={3} sx={{ position: 'sticky', bottom: 0, mt: 2, p: { xs: 1.25, sm: 1.5 }, borderRadius: 1, zIndex: (t) => t.zIndex.appBar }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap', justifyContent: 'space-between' }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-                        <Chip size="small" label={allFilesReady ? 'Files ready' : 'Waiting for files'} color={allFilesReady ? 'success' : 'default'} />
-                        <Chip size="small" label={selectedQuestionNumber ? `Q ${selectedQuestionNumber}` : 'No question selected'} color={selectedQuestionNumber ? 'info' : 'default'} />
-                        {results.length > 0 && <Chip size="small" label={`${results.length} results`} />}
-                    </Box>
-                    <Box sx={{ display: 'flex', gap: 1 }}>
-                        <Button startIcon={<RestartAltIcon />} variant="outlined" onClick={resetAll} disabled={busy}>Reset</Button>
-                        <Button startIcon={<PlayArrowIcon />} variant="contained" disabled={!canRun} onClick={runBatch}>{busy ? 'Grading…' : 'Run grader'}</Button>
-                    </Box>
-                </Box>
-            </Paper>
 
             {/* Success + Error snackbars */}
             <Snackbar open={!!error} autoHideDuration={6000} onClose={() => setError('')} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>

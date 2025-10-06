@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import PageCard from '@/components/PageCard';
 import { Typography, Box, Button } from '@mui/material';
-import HeaderActionButton from '@/components/HeaderActionButton';
+import HeaderActions from '@/components/HeaderActions';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { fetchDashboardMetrics } from './dashboard/metricsApi';
 import { DashboardMetrics, emptyMetrics } from './dashboard/types';
@@ -38,11 +38,28 @@ export default function InstructorDashboard() {
 
     // Button style extracted into HeaderActionButton component
     const headerActions = (
-        <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'nowrap' }}>
-            <HeaderActionButton onClick={() => window.dispatchEvent(new CustomEvent('appshell:navigate', { detail: { id: 'i-assignments' } }))}>Assignments</HeaderActionButton>
-            <HeaderActionButton onClick={() => window.dispatchEvent(new CustomEvent('appshell:navigate', { detail: { id: 'i-questions' } }))}>Questions</HeaderActionButton>
-            <HeaderActionButton onClick={() => window.dispatchEvent(new CustomEvent('appshell:navigate', { detail: { id: 'i-class' } }))}>Roster</HeaderActionButton>
-        </Box>
+        <HeaderActions
+            actions={[
+                {
+                    key: 'assignments',
+                    label: 'Assignments',
+                    ariaLabel: 'Assignments',
+                    onClick: () => window.dispatchEvent(new CustomEvent('appshell:navigate', { detail: { id: 'i-assignments' } })),
+                },
+                {
+                    key: 'questions',
+                    label: 'Questions',
+                    ariaLabel: 'Questions',
+                    onClick: () => window.dispatchEvent(new CustomEvent('appshell:navigate', { detail: { id: 'i-questions' } })),
+                },
+                {
+                    key: 'roster',
+                    label: 'Roster',
+                    ariaLabel: 'Roster',
+                    onClick: () => window.dispatchEvent(new CustomEvent('appshell:navigate', { detail: { id: 'i-class' } })),
+                },
+            ]}
+        />
     );
     return (
         <PageCard headerTitle="Dashboard" headerProps={{ height: 56 }} headerActions={headerActions} headerActionsVariant='plain'>

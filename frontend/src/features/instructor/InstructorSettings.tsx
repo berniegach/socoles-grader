@@ -29,6 +29,7 @@ import GradingOptions from '@/features/instructor/GradingOptions';
 import type { GradingOptions as GradingOptionsType } from '@/lib/types';
 import { DEFAULT_GRADING_OPTIONS } from '@/lib/api';
 import PageCard from '@/components/PageCard';
+import HeaderActions from '@/components/HeaderActions';
 import { useAuth } from '@/features/auth/AuthProvider';
 
 type Settings = {
@@ -41,8 +42,8 @@ type Settings = {
 };
 
 const DEFAULTS: Settings = {
-    courseName: 'DB101 — Intermediate SQL',
-    enrollmentCode: 'DB101-GA20',
+    courseName: 'DB101 - Intermediate SQL',
+    enrollmentCode: 'DB101-SA10',
     attempts: 3,
     latePenalty: 10,
     passThreshold: 0.60,
@@ -146,176 +147,179 @@ export default function InstructorSettings() {
         })();
     }
 
+    const headerActions = (
+        <HeaderActions
+            actions={[
+                { key: 'save-all', label: 'Save All', ariaLabel: 'Save all settings', icon: <SaveIcon fontSize='small' />, onClick: save },
+                { key: 'reset', label: 'Reset', ariaLabel: 'Reset settings', icon: <RestartAltIcon fontSize='small' />, onClick: reset },
+            ]}
+        />
+    );
+
     return (
         <>
-            <PageCard>
-                <Box sx={{ mb: 1.5 }}>
-                    <Typography variant="h6">Settings</Typography>
-                    <Typography variant="body2" color="text.secondary">Manage your course and account configuration.</Typography>
-                </Box>
-                <Card variant="outlined">
-                    <CardContent>
-                        <Grid container spacing={2}>
-                            {/* Account */}
-                            <Grid size={{ xs: 12, md: 6 }}>
-                                <Card>
-                                    <CardHeader title="Account" subheader="General instructor account details." />
-                                    <CardContent>
-                                        <Grid container spacing={2}>
-                                            <Grid size={{ xs: 12, md: 6 }}>
-                                                <TextField
-                                                    label="Display name"
-                                                    value={accountName}
-                                                    onChange={(e) => { setAccountName(e.target.value); setNameDirty(true); }}
-                                                    onBlur={() => { if (nameDirty && accountName.trim()) saveAccountName(); }}
-                                                    helperText={nameDirty ? 'Press Save or blur to persist' : ' '}
-                                                    fullWidth
-                                                    variant='outlined'
-                                                    size='small'
-                                                    inputProps={{ maxLength: 60 }}
-                                                />
-                                            </Grid>
-                                            <Grid size={{ xs: 12, md: 6 }}>
-                                                <TextField label="Email" value={accountEmail || ''} fullWidth variant='outlined' size='small' InputProps={{ readOnly: true }} />
-                                            </Grid>
+            <PageCard headerTitle='Settings' headerProps={{ height: 56 }} headerActions={headerActions} headerActionsVariant='plain'>
+                <Box sx={{ mb: 2 }}>
+                    <Grid container spacing={2}>
+                        {/* Account */}
+                        <Grid size={{ xs: 12, md: 6 }}>
+                            <Card>
+                                <CardHeader title="Account" subheader="General instructor account details." />
+                                <CardContent>
+                                    <Grid container spacing={2}>
+                                        <Grid size={{ xs: 12, md: 6 }}>
+                                            <TextField
+                                                label="Display name"
+                                                value={accountName}
+                                                onChange={(e) => { setAccountName(e.target.value); setNameDirty(true); }}
+                                                onBlur={() => { if (nameDirty && accountName.trim()) saveAccountName(); }}
+                                                helperText={nameDirty ? 'Press Save or blur to persist' : ' '}
+                                                fullWidth
+                                                variant='outlined'
+                                                size='small'
+                                                inputProps={{ maxLength: 60 }}
+                                            />
                                         </Grid>
-                                    </CardContent>
-                                </Card>
-                            </Grid>
-
-                            {/* Course Settings */}
-                            <Grid size={{ xs: 12, md: 6 }}>
-                                <Card>
-                                    <CardHeader title="Course Settings" subheader="General parameters for this course." />
-                                    <CardContent>
-                                        <Grid container spacing={2}>
-                                            <Grid size={12}>
-                                                <TextField
-                                                    label="Course name"
-                                                    value={s.courseName}
-                                                    onChange={(e) => setS({ ...s, courseName: e.target.value })}
-                                                    variant="outlined"
-                                                    size="small"
-                                                    fullWidth
-                                                />
-                                            </Grid>
-                                            <Grid size={{ xs: 12, md: 6 }}>
-                                                <TextField
-                                                    label="Enrollment code"
-                                                    value={s.enrollmentCode}
-                                                    onChange={(e) => setS({ ...s, enrollmentCode: e.target.value })}
-                                                    variant="outlined"
-                                                    size="small"
-                                                    fullWidth
-                                                />
-                                            </Grid>
-                                            <Grid size={{ xs: 6, md: 3 }}>
-                                                <TextField
-                                                    label="Attempts"
-                                                    type="number"
-                                                    inputProps={{ min: 1, max: 20 }}
-                                                    value={s.attempts}
-                                                    onChange={(e) => setS({ ...s, attempts: Math.max(1, Math.min(20, Number(e.target.value || 1))) })}
-                                                    variant="outlined"
-                                                    size="small"
-                                                    fullWidth
-                                                />
-                                            </Grid>
-                                            <Grid size={{ xs: 6, md: 3 }}>
-                                                <TextField
-                                                    label="Pass threshold (%)"
-                                                    type="number"
-                                                    inputProps={{ min: 0, max: 100 }}
-                                                    value={s.passThreshold}
-                                                    onChange={(e) => setS({ ...s, passThreshold: Math.max(0, Math.min(100, Number(e.target.value || 0))) })}
-                                                    variant="outlined"
-                                                    size="small"
-                                                    fullWidth
-                                                />
-                                            </Grid>
-                                            <Grid size={{ xs: 6, md: 3 }}>
-                                                <TextField
-                                                    label="Late penalty (%/day)"
-                                                    type="number"
-                                                    inputProps={{ min: 0, max: 50 }}
-                                                    value={s.latePenalty}
-                                                    onChange={(e) => setS({ ...s, latePenalty: Math.max(0, Math.min(50, Number(e.target.value || 0))) })}
-                                                    variant="outlined"
-                                                    size="small"
-                                                    fullWidth
-                                                />
-                                            </Grid>
+                                        <Grid size={{ xs: 12, md: 6 }}>
+                                            <TextField label="Email" value={accountEmail || ''} fullWidth variant='outlined' size='small' InputProps={{ readOnly: true }} />
                                         </Grid>
-                                    </CardContent>
-                                    <CardActions sx={{ justifyContent: 'flex-end', gap: 1 }}>
-                                        {nameDirty && (
-                                            <Button startIcon={<SaveIcon />} color='secondary' variant='outlined' onClick={saveAccountName} disabled={!accountName.trim()}>Save Name</Button>
-                                        )}
-                                        <Button startIcon={<SaveIcon />} variant="contained" onClick={save}>Save Course</Button>
-                                    </CardActions>
-                                </Card>
-                            </Grid>
-
-                            {/* Grading Defaults */}
-                            <Grid size={{ xs: 12, md: 6 }}>
-                                <Card>
-                                    <CardHeader title="Grading Defaults" subheader="Backend grading parameters used as defaults across tools." />
-                                    <CardContent>
-                                        <GradingOptions
-                                            options={s.gradingDefaults}
-                                            onChange={(key, value) => setS((prev) => ({ ...prev, gradingDefaults: { ...prev.gradingDefaults, [key]: value } }))}
-                                        />
-                                    </CardContent>
-                                    <CardActions sx={{ justifyContent: 'flex-end' }}>
-                                        <Button startIcon={<SaveIcon />} variant="contained" onClick={save}>Save</Button>
-                                    </CardActions>
-                                </Card>
-                            </Grid>
-
-                            {/* CSV Templates */}
-                            <Grid size={{ xs: 12, md: 6 }}>
-                                <Card>
-                                    <CardHeader title="CSV Templates" subheader="Download starter files for bulk grading." />
-                                    <CardContent>
-                                        <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
-                                            <Button startIcon={<DownloadIcon />} variant="outlined" onClick={downloadStudentsTemplate}>
-                                                Students answers CSV
-                                            </Button>
-                                            <Button startIcon={<DownloadIcon />} variant="outlined" onClick={downloadRefsTemplate}>
-                                                Reference statements CSV
-                                            </Button>
-                                        </Box>
-                                    </CardContent>
-                                </Card>
-                            </Grid>
-
-                            {/* Danger Zone */}
-                            <Grid size={{ xs: 12, md: 6 }}>
-                                <Card>
-                                    <CardHeader title="Danger Zone" subheader="Developer-only tools while wiring things up." />
-                                    <CardContent>
-                                        <Alert severity="warning" icon={<WarningAmberIcon />}>
-                                            This resets local settings stored in your browser (safe to use in development).
-                                        </Alert>
-                                    </CardContent>
-                                    <CardActions sx={{ justifyContent: 'space-between' }}>
-                                        <Button startIcon={<RestartAltIcon />} color="warning" variant="outlined" onClick={reset}>
-                                            Reset to defaults
-                                        </Button>
-                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                            <IconButton color="error" onClick={() => setPurgeOpen(true)} title="Delete account & all data">
-                                                <DeleteForeverIcon />
-                                            </IconButton>
-                                            <Button startIcon={<CheckCircleOutlineIcon />} variant="contained" onClick={save}>
-                                                Save all
-                                            </Button>
-                                        </Box>
-                                    </CardActions>
-                                </Card>
-                            </Grid>
+                                    </Grid>
+                                </CardContent>
+                            </Card>
                         </Grid>
-                    </CardContent>
-                </Card>
+
+                        {/* Course Settings */}
+                        <Grid size={{ xs: 12, md: 6 }}>
+                            <Card>
+                                <CardHeader title="Course Settings" subheader="General parameters for this course." />
+                                <CardContent>
+                                    <Grid container spacing={2}>
+                                        <Grid size={12}>
+                                            <TextField
+                                                label="Course name"
+                                                value={s.courseName}
+                                                onChange={(e) => setS({ ...s, courseName: e.target.value })}
+                                                variant="outlined"
+                                                size="small"
+                                                fullWidth
+                                            />
+                                        </Grid>
+                                        <Grid size={{ xs: 12, md: 6 }}>
+                                            <TextField
+                                                label="Enrollment code"
+                                                value={s.enrollmentCode}
+                                                onChange={(e) => setS({ ...s, enrollmentCode: e.target.value })}
+                                                variant="outlined"
+                                                size="small"
+                                                fullWidth
+                                            />
+                                        </Grid>
+                                        <Grid size={{ xs: 6, md: 3 }}>
+                                            <TextField
+                                                label="Attempts"
+                                                type="number"
+                                                inputProps={{ min: 1, max: 20 }}
+                                                value={s.attempts}
+                                                onChange={(e) => setS({ ...s, attempts: Math.max(1, Math.min(20, Number(e.target.value || 1))) })}
+                                                variant="outlined"
+                                                size="small"
+                                                fullWidth
+                                            />
+                                        </Grid>
+                                        <Grid size={{ xs: 6, md: 3 }}>
+                                            <TextField
+                                                label="Pass threshold (%)"
+                                                type="number"
+                                                inputProps={{ min: 0, max: 100 }}
+                                                value={s.passThreshold}
+                                                onChange={(e) => setS({ ...s, passThreshold: Math.max(0, Math.min(100, Number(e.target.value || 0))) })}
+                                                variant="outlined"
+                                                size="small"
+                                                fullWidth
+                                            />
+                                        </Grid>
+                                        <Grid size={{ xs: 6, md: 3 }}>
+                                            <TextField
+                                                label="Late penalty (%/day)"
+                                                type="number"
+                                                inputProps={{ min: 0, max: 50 }}
+                                                value={s.latePenalty}
+                                                onChange={(e) => setS({ ...s, latePenalty: Math.max(0, Math.min(50, Number(e.target.value || 0))) })}
+                                                variant="outlined"
+                                                size="small"
+                                                fullWidth
+                                            />
+                                        </Grid>
+                                    </Grid>
+                                </CardContent>
+                                <CardActions sx={{ justifyContent: 'flex-end', gap: 1 }}>
+                                    {nameDirty && (
+                                        <Button startIcon={<SaveIcon />} color='secondary' variant='outlined' onClick={saveAccountName} disabled={!accountName.trim()}>Save Name</Button>
+                                    )}
+                                    <Button startIcon={<SaveIcon />} variant="contained" onClick={save}>Save Course</Button>
+                                </CardActions>
+                            </Card>
+                        </Grid>
+
+                        {/* Grading Defaults */}
+                        <Grid size={{ xs: 12, md: 6 }}>
+                            <Card>
+                                <CardHeader title="Grading Defaults" subheader="Backend grading parameters used as defaults across tools." />
+                                <CardContent>
+                                    <GradingOptions
+                                        options={s.gradingDefaults}
+                                        onChange={(key, value) => setS((prev) => ({ ...prev, gradingDefaults: { ...prev.gradingDefaults, [key]: value } }))}
+                                    />
+                                </CardContent>
+                                <CardActions sx={{ justifyContent: 'flex-end' }}>
+                                    <Button startIcon={<SaveIcon />} variant="contained" onClick={save}>Save</Button>
+                                </CardActions>
+                            </Card>
+                        </Grid>
+
+                        {/* CSV Templates */}
+                        <Grid size={{ xs: 12, md: 6 }}>
+                            <Card>
+                                <CardHeader title="CSV Templates" subheader="Download starter files for bulk grading." />
+                                <CardContent>
+                                    <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
+                                        <Button startIcon={<DownloadIcon />} variant="outlined" onClick={downloadStudentsTemplate}>
+                                            Students answers CSV
+                                        </Button>
+                                        <Button startIcon={<DownloadIcon />} variant="outlined" onClick={downloadRefsTemplate}>
+                                            Reference statements CSV
+                                        </Button>
+                                    </Box>
+                                </CardContent>
+                            </Card>
+                        </Grid>
+
+                        {/* Danger Zone */}
+                        <Grid size={{ xs: 12, md: 6 }}>
+                            <Card>
+                                <CardHeader title="Danger Zone" subheader="Developer-only tools while wiring things up." />
+                                <CardContent>
+                                    <Alert severity="warning" icon={<WarningAmberIcon />}>
+                                        This resets local settings stored in your browser (safe to use in development).
+                                    </Alert>
+                                </CardContent>
+                                <CardActions sx={{ justifyContent: 'space-between' }}>
+                                    <Button startIcon={<RestartAltIcon />} color="warning" variant="outlined" onClick={reset}>
+                                        Reset to defaults
+                                    </Button>
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                        <IconButton color="error" onClick={() => setPurgeOpen(true)} title="Delete account & all data">
+                                            <DeleteForeverIcon />
+                                        </IconButton>
+                                        <Button startIcon={<CheckCircleOutlineIcon />} variant="contained" onClick={save}>
+                                            Save all
+                                        </Button>
+                                    </Box>
+                                </CardActions>
+                            </Card>
+                        </Grid>
+                    </Grid>
+                </Box>
             </PageCard>
 
             <Snackbar

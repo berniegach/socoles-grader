@@ -19,6 +19,8 @@ import StudentProfile from './StudentProfile';
 import StudentAssignmentPlayer from './StudentAssignmentPlayer';
 import { useAuth } from '@/features/auth/AuthProvider';
 import PageCard from '@/components/PageCard';
+import HeaderActions from '@/components/HeaderActions';
+import RefreshIcon from '@mui/icons-material/Refresh';
 
 interface AssignmentApi { id: string; title: string; course: string; difficulty: string; points: number; due: string; tags: string[]; questions?: { id: string }[] }
 interface SubmissionApi { id: string; student: string; assignment: string; date: string; grade: number; status: string }
@@ -340,8 +342,12 @@ export default function StudentArea({ active }: { active: string }) {
         <Box sx={{ display: 'grid', gap: 2 }}>
             {/* Dashboard */}
             {active === 's-dash' && (
-                <PageCard>
-                    {header('Dashboard', 'Overview of your assignments and recent activity.')}
+                <PageCard
+                    headerTitle='Dashboard'
+                    headerProps={{ height: 56 }}
+                    headerActions={<HeaderActions actions={[{ key: 'refresh-dash', label: 'Refresh', ariaLabel: 'Refresh data', icon: <RefreshIcon fontSize='small' />, onClick: () => { /* simple reload */ window.dispatchEvent(new Event('focus')); } }]} />}
+                    headerActionsVariant='plain'
+                >
                     <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { md: 'repeat(3,1fr)', xs: '1fr' } }}>
                         <StatCard icon={AssignmentTurnedInIcon} label="Total assignments" value={assignments.length} tone="secondary" />
                         <StatCard icon={TimerIcon} label="Nearest due" value={nearestDueDays} postfix="days" tone={nearestDueTone} />
@@ -388,8 +394,12 @@ export default function StudentArea({ active }: { active: string }) {
 
             {/* Assignments */}
             {active === 's-assignments' && (
-                <PageCard>
-                    {header('Assignments', 'All assigned work for this course.')}
+                <PageCard
+                    headerTitle='Assignments'
+                    headerProps={{ height: 56 }}
+                    headerActions={<HeaderActions actions={[{ key: 'refresh-assign', label: 'Refresh', ariaLabel: 'Refresh assignments', icon: <RefreshIcon fontSize='small' />, onClick: () => window.dispatchEvent(new Event('focus')) }]} />}
+                    headerActionsVariant='plain'
+                >
                     {playerAssignmentId ? (
                         <StudentAssignmentPlayer
                             assignmentId={playerAssignmentId}
@@ -404,16 +414,34 @@ export default function StudentArea({ active }: { active: string }) {
 
             {/* Submissions */}
             {active === 's-submissions' && (
-                <PageCard>
-                    {header('Your Submissions', 'History of what you’ve submitted.')}
-                    <StudentSubmissions rows={submissions} />
+                <PageCard
+                    headerTitle='Your Submissions'
+                    headerProps={{ height: 56 }}
+                    headerActions={<HeaderActions actions={[{ key: 'refresh-subs', label: 'Refresh', ariaLabel: 'Refresh submissions', icon: <RefreshIcon fontSize='small' />, onClick: () => window.dispatchEvent(new Event('focus')) }]} />}
+                    headerActionsVariant='plain'
+                >
+                    <StudentSubmissions
+                        rows={submissions}
+                        onOpenAssignment={(title) => {
+                            const target = assignments.find(a => a.title === title);
+                            if (target) {
+                                setPlayerAssignmentId(target.id);
+                                // navigate to assignments page for consistent UI
+                                window.dispatchEvent(new CustomEvent('appshell:navigate', { detail: { id: 's-assignments' } }));
+                            }
+                        }}
+                    />
                 </PageCard>
             )}
 
             {/* Profile */}
             {active === 's-profile' && (
-                <PageCard>
-                    {header('Profile & Preferences', 'Name, theme and editor preferences.')}
+                <PageCard
+                    headerTitle='Profile & Preferences'
+                    headerProps={{ height: 56 }}
+                    headerActions={<HeaderActions actions={[]} />}
+                    headerActionsVariant='plain'
+                >
                     <StudentProfile />
                 </PageCard>
             )}

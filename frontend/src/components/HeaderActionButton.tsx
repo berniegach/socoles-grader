@@ -27,6 +27,13 @@ export const HeaderActionButton: React.FC<HeaderActionButtonProps> = ({ children
                 color: '#fff',
                 textTransform: 'none',
                 '&:hover': { background: hover, borderColor: 'rgba(255,255,255,0.55)' },
+                '&.Mui-disabled': {
+                    background: 'linear-gradient(135deg, rgba(255,255,255,0.14), rgba(255,255,255,0.06))',
+                    color: 'rgba(255,255,255,0.38)',
+                    border: '1px solid rgba(255,255,255,0.18)',
+                    boxShadow: 'none',
+                    backdropFilter: 'blur(2px)',
+                },
                 ...sx
             }}
         >
