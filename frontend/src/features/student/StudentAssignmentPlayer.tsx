@@ -2,6 +2,7 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { Box, Card, CardHeader, CardContent, CardActions, Typography, Button, Chip, Tabs, Tab, Divider, Collapse, CircularProgress } from '@mui/material';
 import { formatDateTimeDDMMYYYYHHmm } from '@/lib/format';
+import DifficultyChip from '@/components/DifficultyChip';
 import SqlEditor from '@/components/SqlEditor';
 import PromptWithHint from '@/components/PromptWithHint';
 import SchemaPreview from '@/components/SchemaPreview';
@@ -246,18 +247,22 @@ export default function StudentAssignmentPlayer({ assignmentId, onClose, onSubmi
                     setQuestionDrafts(map as Record<string, QuestionSubmissionDraft>);
                     setAttemptMap(attempts);
                     setQsIdByQuestion(idMap);
-                    // On first load, pick the most recently worked question (heuristic: highest index with attempt>0 or draft content)
+                    // On first load, pick the first question if locked/submitted, else pick the most recently worked question
                     if (!restoredRef.current && assignment?.questions?.length) {
-                        const sorted = [...assignment.questions].sort((a, b) => a.position - b.position);
-                        let pickedIdx = 0;
-                        for (let i = 0; i < sorted.length; i++) {
-                            const q = sorted[i];
-                            const att = attempts[q.id] || 0;
-                            const d = map[q.id];
-                            const hasWork = att > 0 || (d && ((d.sql && d.sql.trim().length > 0) || d.grade != null));
-                            if (hasWork) pickedIdx = i; // choose the furthest with work
+                        if (isLocked) {
+                            setActiveIdx(0);
+                        } else {
+                            const sorted = [...assignment.questions].sort((a, b) => a.position - b.position);
+                            let pickedIdx = 0;
+                            for (let i = 0; i < sorted.length; i++) {
+                                const q = sorted[i];
+                                const att = attempts[q.id] || 0;
+                                const d = map[q.id];
+                                const hasWork = att > 0 || (d && ((d.sql && d.sql.trim().length > 0) || d.grade != null));
+                                if (hasWork) pickedIdx = i; // choose the furthest with work
+                            }
+                            setActiveIdx(pickedIdx);
                         }
-                        setActiveIdx(pickedIdx);
                         restoredRef.current = true;
                     }
                 }
@@ -636,7 +641,9 @@ export default function StudentAssignmentPlayer({ assignmentId, onClose, onSubmi
                 <Box>
                     <Typography variant='subtitle2' sx={{ mb: .5 }}>{currentQuestion?.title}</Typography>
                     <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 1 }}>
-                        <Chip size='small' label={currentQuestion?.difficulty} />
+                        {currentQuestion?.difficulty && (
+                            <DifficultyChip value={currentQuestion.difficulty} size='small' />
+                        )}
                         {currentQuestion?.pointsOverride != null ? <Chip size='small' label={`${currentQuestion.pointsOverride} pts`} color='primary' /> : <Chip size='small' label={`${currentQuestion?.maxPoints} pts`} />}
                         <Chip size='small' label={`Attempts left: ${attemptsLeft}`} color={attemptsLeft > 0 ? 'default' : 'warning'} />
                     </Box>

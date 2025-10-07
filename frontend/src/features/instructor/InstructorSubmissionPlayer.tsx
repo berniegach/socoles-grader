@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useMemo, useState } from 'react';
 import { Box, Card, CardHeader, CardContent, CardActions, Typography, Button, Chip, Tabs, Tab, Divider, CircularProgress } from '@mui/material';
+import AttemptTabs from '@/components/AttemptTabs';
 import SchemaPreview from '@/components/SchemaPreview';
 import PromptWithHint from '@/components/PromptWithHint';
 import SqlEditor from '@/components/SqlEditor';
@@ -191,32 +192,22 @@ export default function InstructorSubmissionPlayer({ assignmentId, submission, o
                             <Divider sx={{ my: 1.5 }} />
                             <Box>
                                 <Typography variant='body2' color='text.secondary' sx={{ mb: 1 }}>Attempts</Typography>
-                                {(() => {
-                                    const qid = activeQuestion?.questionId || '';
-                                    const state = historyMap[qid];
-                                    if (!state || state.loading) {
-                                        return <Typography variant='caption' color='text.secondary' sx={{ display: 'inline-flex', alignItems: 'center', gap: .75 }}><CircularProgress size={12} /> Loading…</Typography>;
-                                    }
-                                    const attempts = [...(state.attempts || [])].sort((a, b) => a.attempt - b.attempt);
-                                    if (!attempts.length) return <Typography variant='caption' color='text.secondary'>No attempts yet.</Typography>;
-                                    const current = attempts[Math.min(Math.max(0, attemptTab), attempts.length - 1)];
-                                    return (
-                                        <Box>
-                                            <Tabs value={Math.min(attemptTab, attempts.length - 1)} onChange={(_, v) => setAttemptTab(v)} variant='scrollable' scrollButtons='auto' sx={{ mb: 1 }}>
-                                                {attempts.map((a, i) => (
-                                                    <Tab key={a.id} label={`Attempt ${a.attempt}`} value={i} />
-                                                ))}
-                                            </Tabs>
-                                            <Box sx={{ p: 1, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
-                                                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: .5 }}>
-                                                    <Typography variant='subtitle2'>Attempt {current.attempt}</Typography>
-                                                    <Typography variant='caption' color='text.secondary'>{current.createdAt ? formatDateTimeDDMMYYYYHHmm(current.createdAt) : ''}</Typography>
-                                                </Box>
-                                                <Typography variant='caption' color='text.secondary'>Select a tab above to switch attempts.</Typography>
+                                <AttemptTabs
+                                    attempts={attemptsSorted}
+                                    loading={attemptsLoading}
+                                    error={historyMap[activeQuestion?.questionId || '']?.error}
+                                    attemptTab={attemptTab}
+                                    setAttemptTab={setAttemptTab}
+                                    renderAttempt={current => (
+                                        <Box sx={{ p: 1, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
+                                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: .5 }}>
+                                                <Typography variant='subtitle2'>Attempt {current.attempt}</Typography>
+                                                <Typography variant='caption' color='text.secondary'>{current.createdAt ? formatDateTimeDDMMYYYYHHmm(current.createdAt) : ''}</Typography>
                                             </Box>
+                                            <Typography variant='caption' color='text.secondary'>Select a tab above to switch attempts.</Typography>
                                         </Box>
-                                    );
-                                })()}
+                                    )}
+                                />
                             </Box>
                         </CardContent>
                     </Card>

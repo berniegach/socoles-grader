@@ -36,6 +36,7 @@ import EditIcon from '@mui/icons-material/Edit';
 import DeleteForeverIcon from '@mui/icons-material/DeleteForever';
 import Menu from '@mui/material/Menu';
 import PageCard from '@/components/PageCard';
+import TileCard from '@/components/TileCard';
 import TilesGrid from '@/components/TilesGrid';
 import HeaderActionButton from '@/components/HeaderActionButton';
 import HeaderActions from '@/components/HeaderActions';
@@ -318,56 +319,28 @@ export default function AssignmentQuestionManager() {
                         {!loading && (
                             <TilesGrid>
                                 {filteredAssignments.map(a => (
-                                    <Box
+                                    <TileCard
                                         key={a.id}
-                                        role='button'
-                                        tabIndex={0}
+                                        title={a.title}
+                                        subtitle={a.course}
+                                        chips={[
+                                            <DifficultyChip key="difficulty" value={a.difficulty} />,
+                                            <Chip key="points" size="small" label={`${a.points} pts`} variant="outlined" />,
+                                            <Chip key="attempts" size="small" label={`Attempts: ${(a as any).attemptsAllowed ?? 3}`} variant="outlined" />,
+                                            <Chip key="due" size="small" label={`Due: ${a.due || '—'}`} variant="outlined" />
+                                        ]}
                                         onClick={() => { setSelectedId(a.id); setPickerMode(true); }}
-                                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedId(a.id); setPickerMode(true); } }}
-                                        sx={(theme) => ({
-                                            position: 'relative',
-                                            p: 1.25,
-                                            borderRadius: 1.25,
-                                            cursor: 'pointer',
-                                            display: 'grid',
-                                            gap: 0.75,
-                                            minHeight: 108,
-                                            background: theme.palette.mode === 'dark'
-                                                ? 'rgba(255,255,255,0.03)'
-                                                : 'linear-gradient(145deg,#ffffff,#f9f9f9)',
-                                            border: '1px solid',
-                                            borderColor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
-                                            boxShadow: '0 1px 2px rgba(0,0,0,0.08)',
-                                            transition: 'background .25s, box-shadow .25s, transform .25s, border-color .25s',
-                                            outline: 'none',
-                                            '&:hover': {
-                                                boxShadow: '0 4px 12px -2px rgba(0,0,0,0.25)',
-                                                transform: 'translateY(-2px)',
-                                                borderColor: 'primary.light'
-                                            },
-                                            '&:focus-visible': {
-                                                boxShadow: '0 0 0 2px #fff, 0 0 0 4px #ff66c4',
-                                            }
-                                        })}
-                                    >
-                                        <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1 }}>
-                                            <Box sx={{ flex: 1, minWidth: 0 }}>
-                                                <Typography variant='subtitle2' sx={{ fontWeight: 600, lineHeight: 1.2, pr: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.title}</Typography>
-                                                <Typography variant='caption' color='text.secondary'>{a.course}</Typography>
-                                            </Box>
+                                        tabIndex={0}
+                                        role="button"
+                                        onKeyDown={(e: React.KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedId(a.id); setPickerMode(true); } }}
+                                        headerRight={(
                                             <Tooltip title='Actions'>
                                                 <IconButton size='small' onClick={(e) => { e.stopPropagation(); openActions(e, a); }} aria-label={`Actions for ${a.title}`}>
                                                     <MoreVertIcon fontSize='small' />
                                                 </IconButton>
                                             </Tooltip>
-                                        </Box>
-                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6, flexWrap: 'wrap' }}>
-                                            <DifficultyChip value={a.difficulty} />
-                                            <Chip size='small' label={`${a.points} pts`} variant='outlined' />
-                                            <Chip size='small' label={`Attempts: ${(a as any).attemptsAllowed ?? 3}`} variant='outlined' />
-                                            <Chip size='small' label={`Due: ${a.due || '—'}`} variant='outlined' />
-                                        </Box>
-                                    </Box>
+                                        )}
+                                    />
                                 ))}
                             </TilesGrid>
                         )}
