@@ -17,6 +17,7 @@ import StudentSubmissions from './StudentSubmissions';
 import FeedbackSurveyDialog from './FeedbackSurveyDialog';
 import StudentProfile from './StudentProfile';
 import StudentAssignmentPlayer from './StudentAssignmentPlayer';
+import StudentSubmissionReview from './StudentSubmissionReview';
 import { useAuth } from '@/features/auth/AuthProvider';
 import PageCard from '@/components/PageCard';
 import HeaderActions from '@/components/HeaderActions';
@@ -151,6 +152,7 @@ export default function StudentArea({ active }: { active: string }) {
     const [submissions, setSubmissions] = useState<SubmissionApi[]>([]);
     const [loading, setLoading] = useState(false);
     const [playerAssignmentId, setPlayerAssignmentId] = useState<string | null>(null);
+    const [reviewMode, setReviewMode] = useState(false); // true when viewing a finished submission
     const [surveyOpen, setSurveyOpen] = useState(false);
     const [surveyAssignmentId, setSurveyAssignmentId] = useState<string | null>(null);
     const [surveyedAssignments, setSurveyedAssignments] = useState<Set<string>>(new Set());
@@ -239,7 +241,6 @@ export default function StudentArea({ active }: { active: string }) {
                 if (s.student === me && s.assignment === a.title) { // assignment title used in submissions
                     // we need per-question submissions; rely on question_submissions endpoint when opening player for detailed stats
                     // As a lightweight proxy: if there is at least one submission for the assignment per question count threshold.
-                    // (Improvement: replace with real per-question check if IDs available.)
                     covered = needed; // fallback: treat as covered when any submission exists
                 }
             });
@@ -315,7 +316,7 @@ export default function StudentArea({ active }: { active: string }) {
         </Box>
     );
 
-    function openAssignment(aId: string) { setPlayerAssignmentId(aId); }
+    function openAssignment(aId: string) { setPlayerAssignmentId(aId); setReviewMode(false); }
     // Helper to navigate AppShell to the Assignments page
     function goToAssignments() {
         try {
@@ -401,11 +402,18 @@ export default function StudentArea({ active }: { active: string }) {
                     headerActionsVariant='plain'
                 >
                     {playerAssignmentId ? (
-                        <StudentAssignmentPlayer
-                            assignmentId={playerAssignmentId}
-                            onClose={() => { setPlayerAssignmentId(null); refreshSubmissions(); }}
-                            onSubmitted={() => { refreshSubmissions(); }}
-                        />
+                        reviewMode ? (
+                            <StudentSubmissionReview
+                                assignmentId={playerAssignmentId}
+                                onClose={() => { setPlayerAssignmentId(null); setReviewMode(false); refreshSubmissions(); }}
+                            />
+                        ) : (
+                            <StudentAssignmentPlayer
+                                assignmentId={playerAssignmentId}
+                                onClose={() => { setPlayerAssignmentId(null); refreshSubmissions(); }}
+                                onSubmitted={() => { refreshSubmissions(); setReviewMode(true); }}
+                            />
+                        )
                     ) : (
                         <AssignmentsGrid openEditor={(seed, aId) => { if (aId) { openAssignment(aId); } else { setSql(seed || sql); setEditorOpen(true); } }} assignments={assignments} submittedTitles={submittedTitles} inProgressTitles={categorized.inProgressTitles} highlightOverdueBorder />
                     )}
@@ -420,17 +428,31 @@ export default function StudentArea({ active }: { active: string }) {
                     headerActions={<HeaderActions actions={[{ key: 'refresh-subs', label: 'Refresh', ariaLabel: 'Refresh submissions', icon: <RefreshIcon fontSize='small' />, onClick: () => window.dispatchEvent(new Event('focus')) }]} />}
                     headerActionsVariant='plain'
                 >
-                    <StudentSubmissions
-                        rows={submissions}
-                        onOpenAssignment={(title) => {
-                            const target = assignments.find(a => a.title === title);
-                            if (target) {
+                    {playerAssignmentId ? (
+                        reviewMode ? (
+                            <StudentSubmissionReview
+                                assignmentId={playerAssignmentId}
+                                onClose={() => { setPlayerAssignmentId(null); setReviewMode(false); refreshSubmissions(); }}
+                            />
+                        ) : (
+                            <StudentAssignmentPlayer
+                                assignmentId={playerAssignmentId}
+                                onClose={() => { setPlayerAssignmentId(null); refreshSubmissions(); }}
+                                onSubmitted={() => { refreshSubmissions(); setReviewMode(true); }}
+                            />
+                        )
+                    ) : (
+                        <StudentSubmissions
+                            rows={submissions}
+                            onOpenAssignment={(title) => {
+                                const target = assignments.find(a => a.title === title);
+                                if (!target) return;
                                 setPlayerAssignmentId(target.id);
-                                // navigate to assignments page for consistent UI
-                                window.dispatchEvent(new CustomEvent('appshell:navigate', { detail: { id: 's-assignments' } }));
-                            }
-                        }}
-                    />
+                                const finished = submissions.some(s => s.assignment === title && (s.status === 'Submitted' || s.status === 'Auto-graded' || s.status === 'Needs review'));
+                                setReviewMode(finished);
+                            }}
+                        />
+                    )}
                 </PageCard>
             )}
 

@@ -674,7 +674,6 @@ export default function QuestionManager() {
                                 <TextField label="Max points" type="number" value={maxPoints} onChange={(e) => setMaxPoints(Number(e.target.value))} variant="outlined" fullWidth />
                             </Box>
                             <Box>
-                                {/* Dataset selector with create (manage moved to Datasets page) */}
                                 <TextField
                                     label="Dataset"
                                     value={dataset}

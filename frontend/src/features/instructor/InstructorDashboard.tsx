@@ -58,6 +58,12 @@ export default function InstructorDashboard() {
                     ariaLabel: 'Roster',
                     onClick: () => window.dispatchEvent(new CustomEvent('appshell:navigate', { detail: { id: 'i-class' } })),
                 },
+                {
+                    key: 'reviews',
+                    label: 'Reviews',
+                    ariaLabel: 'Review Requests',
+                    onClick: () => window.dispatchEvent(new CustomEvent('appshell:navigate', { detail: { id: 'i-reviews' } })),
+                },
             ]}
         />
     );

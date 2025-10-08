@@ -49,10 +49,14 @@ export default function AppShell() {
     // Allow children to request navigation via a custom event
     useEffect(() => {
         function onNavigate(e: Event) {
-            const detail = (e as CustomEvent).detail as { id?: string } | undefined;
+            const detail = (e as CustomEvent).detail as { id?: string; submissionId?: string; questionId?: string; assignmentId?: string } | undefined;
             if (detail?.id) {
                 setActive(detail.id);
                 sessionStorage.setItem('appshell.active', detail.id);
+                const { submissionId, questionId, assignmentId } = detail;
+                if (submissionId || questionId || assignmentId) {
+                    sessionStorage.setItem('appshell.deepLink', JSON.stringify({ submissionId, questionId, assignmentId, ts: Date.now() }));
+                }
             }
         }
         window.addEventListener('appshell:navigate', onNavigate as EventListener);

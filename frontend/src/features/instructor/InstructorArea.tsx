@@ -8,6 +8,7 @@ import ClassRoster from './ClassRoster';
 import InstructorSettings from './InstructorSettings';
 import AssignmentQuestionManager from './AssignmentQuestionManager';
 import DatasetsManager from './DatasetsManager';
+import InstructorReviewRequests from './InstructorReviewRequests';
 
 
 export default function InstructorArea({ active }: { active: string }) {
@@ -21,6 +22,7 @@ export default function InstructorArea({ active }: { active: string }) {
             {active === 'i-submissions' && <SubmissionReview />}
             {active === 'i-class' && <ClassRoster />}
             {active === 'i-settings' && <InstructorSettings />}
+            {active === 'i-reviews' && <InstructorReviewRequests />}
         </Box>
     );
 }

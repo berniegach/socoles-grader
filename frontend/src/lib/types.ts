@@ -103,6 +103,20 @@ export interface QuestionSubmissionAttempt {
     rubric: QuestionRubric | null;
     feedback: string[];
     attempt: number;
+    manual?: boolean;
+    createdAt: string;
+}
+
+export interface ReviewRequest {
+    id: string; assignmentId: string; questionId: string; submissionId: string; student: string; comment: string; status: string; createdAt: string; updatedAt: string; instructorReply?: string | null; replyAt?: string | null;
+}
+
+export interface ReviewRequestMessage {
+    id: string;
+    requestId: string;
+    senderRole: 'student' | 'instructor';
+    sender: string;
+    message: string;
     createdAt: string;
 }
 

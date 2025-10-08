@@ -171,10 +171,45 @@ export async function initSchema() {
       status TEXT NOT NULL DEFAULT 'Auto-graded',
       rubric JSONB NULL,
       feedback TEXT[] NOT NULL DEFAULT '{}',
+  manual BOOLEAN NOT NULL DEFAULT false,
       attempt INT NOT NULL DEFAULT 1,
       owner_id UUID REFERENCES instructors(id) ON DELETE CASCADE,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );`);
+  // Backfill new columns for existing deployments (idempotent)
+  await query(`ALTER TABLE question_submission_attempts ADD COLUMN IF NOT EXISTS manual BOOLEAN NOT NULL DEFAULT false;`);
+
+  // Review requests (students can flag a graded question for re-evaluation)
+  await query(`CREATE TABLE IF NOT EXISTS question_review_requests (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      assignment_id UUID REFERENCES assignments(id) ON DELETE CASCADE,
+      question_id UUID REFERENCES questions(id) ON DELETE CASCADE,
+      submission_id UUID REFERENCES submissions(id) ON DELETE CASCADE,
+      student TEXT NOT NULL,
+      comment TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'Pending', -- Pending | Resolved
+  instructor_reply TEXT NULL,
+  reply_at TIMESTAMPTZ NULL,
+      owner_id UUID REFERENCES instructors(id) ON DELETE CASCADE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      UNIQUE(assignment_id, question_id, submission_id, student, owner_id)
+    );`);
+  await query(`ALTER TABLE question_review_requests ADD COLUMN IF NOT EXISTS instructor_reply TEXT NULL;`);
+  await query(`ALTER TABLE question_review_requests ADD COLUMN IF NOT EXISTS reply_at TIMESTAMPTZ NULL;`);
+
+  // Threaded messaging for review requests
+  await query(`CREATE TABLE IF NOT EXISTS question_review_request_messages (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      request_id UUID REFERENCES question_review_requests(id) ON DELETE CASCADE,
+      sender_role TEXT NOT NULL, -- 'student' | 'instructor'
+      sender TEXT NOT NULL, -- identifier (email/name)
+      message TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      owner_id UUID REFERENCES instructors(id) ON DELETE CASCADE
+  );`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_qrrm_request ON question_review_request_messages(request_id);`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_qrrm_owner ON question_review_request_messages(owner_id);`);
 
   // Post-quiz micro-survey (one row per student per assignment)
   await query(`CREATE TABLE IF NOT EXISTS assignment_feedback_survey (
@@ -228,7 +263,6 @@ export async function initSchema() {
   );`);
   await query(`CREATE INDEX IF NOT EXISTS idx_roster_owner_email ON roster(owner_id, email);`);
 
-  // Ensure expires_at defaults to 14 days if null on insert via trigger-like behavior in app
 
   // Indexes for tenant isolation performance
   await query(`CREATE INDEX IF NOT EXISTS idx_questions_owner ON questions(owner_id);`);
@@ -241,9 +275,10 @@ export async function initSchema() {
   await query(`CREATE INDEX IF NOT EXISTS idx_roster_owner ON roster(owner_id);`);
   await query(`CREATE INDEX IF NOT EXISTS idx_invites_owner ON invites(owner_id);`);
   await query(`CREATE INDEX IF NOT EXISTS idx_invites_token ON invites(token);`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_review_requests_owner ON question_review_requests(owner_id);`);
 
   // Enable Row Level Security and policies (idempotent)
-  const tables = ['questions', 'datasets', 'assignments', 'submissions', 'assignment_questions', 'question_submissions', 'question_submission_attempts', 'roster'];
+  const tables = ['questions', 'datasets', 'assignments', 'submissions', 'assignment_questions', 'question_submissions', 'question_submission_attempts', 'roster', 'question_review_requests'];
   for (const t of tables) {
     await query(`ALTER TABLE ${t} ENABLE ROW LEVEL SECURITY;`).catch(() => { });
     // Replace unsupported IF NOT EXISTS with explicit drop/create (idempotent)

@@ -89,8 +89,8 @@ export async function POST(req: NextRequest) {
             let qs = rows[0];
             if (shouldIncrement) {
                 const nextAttempt = await getNextAttempt(qs.id);
-                await query(`INSERT INTO question_submission_attempts (question_submission_id, submission_id, assignment_id, question_id, student, sql, grade, status, rubric, feedback, attempt, owner_id)
-                    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,current_setting('app.current_instructor')::uuid)`, [qs.id, submissionId, assignmentId, questionId, student, sql || '', grade ?? null, status || 'Auto-graded', rubric || null, Array.isArray(feedback) ? feedback : [], nextAttempt]);
+                await query(`INSERT INTO question_submission_attempts (question_submission_id, submission_id, assignment_id, question_id, student, sql, grade, status, rubric, feedback, manual, attempt, owner_id)
+                    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,($8='Manual'),$11,current_setting('app.current_instructor')::uuid)`, [qs.id, submissionId, assignmentId, questionId, student, sql || '', grade ?? null, status || 'Auto-graded', rubric || null, Array.isArray(feedback) ? feedback : [], nextAttempt]);
                 const upd = await query(`UPDATE question_submissions SET attempt=$2 WHERE id=$1 RETURNING id, submission_id as "submissionId", assignment_id as "assignmentId", question_id as "QuestionId", student, sql, grade::float8 as grade, status, rubric, feedback, attempt`, [qs.id, nextAttempt]);
                 qs = upd.rows[0] || qs;
             }
@@ -119,8 +119,8 @@ export async function PATCH(req: NextRequest) {
             const shouldIncrement = incrementAttempt === true || noAttemptIncrement === false;
             if (shouldIncrement) {
                 const nextAttempt = await getNextAttempt(id);
-                await query(`INSERT INTO question_submission_attempts (question_submission_id, submission_id, assignment_id, question_id, student, sql, grade, status, rubric, feedback, attempt, owner_id)
-                    SELECT $1, submission_id, assignment_id, question_id, student, sql, $2, $3, $4, $5, $6, current_setting('app.current_instructor')::uuid
+                await query(`INSERT INTO question_submission_attempts (question_submission_id, submission_id, assignment_id, question_id, student, sql, grade, status, rubric, feedback, manual, attempt, owner_id)
+                    SELECT $1, submission_id, assignment_id, question_id, student, sql, $2, $3, $4, $5, ($3='Manual'), $6, current_setting('app.current_instructor')::uuid
                     FROM question_submissions WHERE id=$1`, [id, grade ?? null, status || 'Auto-graded', rubric || null, Array.isArray(feedback) ? feedback : [], nextAttempt]);
                 const upd = await query(`UPDATE question_submissions SET attempt=$2 WHERE id=$1 RETURNING id, submission_id as "submissionId", assignment_id as "assignmentId", question_id as "questionId", student, sql, grade::float8 as grade, status, rubric, feedback, attempt`, [id, nextAttempt]);
                 qs = upd.rows[0] || qs;

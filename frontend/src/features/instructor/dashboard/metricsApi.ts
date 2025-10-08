@@ -25,19 +25,21 @@ export async function fetchDashboardMetrics(authFetch: (url: string, init?: Requ
             }
         } catch { /* fall back silently */ }
 
-        const [subsRes, assignmentsRes] = await Promise.all([
+        const [subsRes, assignmentsRes, reviewRes] = await Promise.all([
             authFetch('/api/submissions'),
             authFetch('/api/assignments'),
+            authFetch('/api/review-requests')
         ]);
         if (!subsRes.ok) return emptyMetrics;
         const subs = await subsRes.json();
         const assignments = assignmentsRes.ok ? await assignmentsRes.json() : [];
+        const reviews = reviewRes.ok ? await reviewRes.json() : [];
         const now = new Date();
 
         const graded = subs.filter((s: any) => typeof s.grade === 'number');
         const avgGrade = graded.length ? graded.reduce((a: number, b: any) => a + (b.grade || 0), 0) / graded.length / 10 : 0; // assuming grade out of 10
         const passRate = graded.length ? graded.filter((s: any) => (s.grade || 0) >= 6).length / graded.length : 0;
-        const pendingReviews = subs.filter((s: any) => (s.status || '').toLowerCase().includes('needs')).length;
+        const pendingReviews = Array.isArray(reviews) ? reviews.filter((r: any) => r.status === 'Pending').length : 0;
 
         // Trends (last 7 days)
         const dayKey = (d: Date) => d.toISOString().slice(0, 10);

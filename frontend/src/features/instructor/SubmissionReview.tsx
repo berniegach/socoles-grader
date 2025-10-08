@@ -10,10 +10,10 @@ import { useAuth } from '@/features/auth/AuthProvider';
 import { useRosterMap } from '@/lib/useRosterMap';
 import PageCard from '@/components/PageCard';
 import TilesGrid from '@/components/TilesGrid';
-import TileCard from '@/components/TileCard';
 import DifficultyChip from '@/components/DifficultyChip';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import CloseFullscreenIcon from '@mui/icons-material/CloseFullscreen';
+import HeaderActionButton from '@/components/HeaderActionButton';
 import HeaderActions from '@/components/HeaderActions';
 import ResultsCharts from '@/components/ResultsCharts';
 import InstructorSubmissionPlayer from '@/features/instructor/InstructorSubmissionPlayer';
@@ -102,6 +102,8 @@ export default function SubmissionReview() {
             const res = await authFetch(`/api/question-submissions?submissionId=${submissionId}`);
             const data = await res.json();
             setRows(r => r.map(s => s.id === submissionId ? { ...s, questions: data } : s));
+            // After loading questions, recompute parent submission status/grade
+            await updateParentSubmission(submissionId);
         } catch { /* ignore */ }
     }
 
@@ -114,6 +116,35 @@ export default function SubmissionReview() {
         }
     }, [selectedSubmissionId, rows]);
 
+    // Helper to recompute and update parent submission status/grade after grading
+    async function updateParentSubmission(submissionId: string) {
+        try {
+            const qsRes = await authFetch(`/api/question-submissions?submissionId=${submissionId}`);
+            if (!qsRes.ok) return;
+            const qs = await qsRes.json();
+            const graded = (qs || []).filter((q: any) => typeof q.grade === 'number');
+            if (!graded.length) return; // don't switch status unless some grading exists
+            // Compute SUM of numeric grades (not average)
+            const total = graded.reduce((sum: number, q: any) => sum + (q.grade || 0), 0);
+            const patch = await authFetch('/api/submissions', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: submissionId, grade: total, status: 'Auto-graded' }) });
+            if (!patch.ok) return;
+            const updated = await patch.json();
+            setRows(r => r.map((s: any) => s.id === submissionId ? { ...s, grade: updated.grade, status: updated.status } : s));
+        } catch { /* ignore */ }
+    }
+
+    // load attempt history for a given question submission id
+    async function loadAttemptHistory(qsId: string) {
+        setHistoryByQId(m => ({ ...m, [qsId]: { ...(m[qsId] || { open: true, attempts: [] }), loading: true, error: undefined } }));
+        try {
+            const res = await authFetch(`/api/question-submissions?historyOf=${qsId}`);
+            if (!res.ok) throw new Error('Failed to load history');
+            const attempts: QuestionSubmissionAttempt[] = await res.json();
+            setHistoryByQId(m => ({ ...m, [qsId]: { open: true, loading: false, attempts } }));
+        } catch (e: any) {
+            setHistoryByQId(m => ({ ...m, [qsId]: { open: true, loading: false, attempts: [], error: e?.message || 'Failed to load history' } }));
+        }
+    }
 
     // Filtered list of assignments by search
     const filteredAssignments = useMemo(() => {
@@ -121,6 +152,37 @@ export default function SubmissionReview() {
         if (!q) return assignments;
         return assignments.filter(a => a.title.toLowerCase().includes(q) || a.course.toLowerCase().includes(q));
     }, [assignments, search]);
+
+    // Deep-link: if appshell.deepLink exists with submission/question, preselect after assignments & submissions load
+    useEffect(() => {
+        try {
+            const raw = sessionStorage.getItem('appshell.deepLink');
+            if (!raw) return;
+            const dl = JSON.parse(raw) as { assignmentId?: string; submissionId?: string; questionId?: string; ts?: number };
+            if (!dl?.submissionId) return;
+            // Clear so it's one-shot
+            sessionStorage.removeItem('appshell.deepLink');
+            // If assignment loaded, set it; else wait via polling effect below
+            if (dl.assignmentId) {
+                const asg = assignments.find(a => a.id === dl.assignmentId);
+                if (asg) setSelectedAssignment(asg);
+            }
+            // Defer selecting submission until submissions list loaded for that assignment
+            const tick = setInterval(() => {
+                setRows(r => {
+                    const exists = r.some(s => s.id === dl.submissionId);
+                    if (exists) {
+                        setSelectedSubmissionId(dl.submissionId!);
+                        clearInterval(tick);
+                    }
+                    return r;
+                });
+            }, 300);
+            setTimeout(() => clearInterval(tick), 5000);
+            // Store desired question id in session for player to consume
+            if (dl.questionId) sessionStorage.setItem('appshell.deepLink.questionId', dl.questionId);
+        } catch { /* ignore */ }
+    }, [assignments]);
 
     return (
         <PageCard
@@ -163,20 +225,19 @@ export default function SubmissionReview() {
                     </Box>
                     <TilesGrid>
                         {filteredAssignments.map(a => (
-                            <TileCard
-                                key={a.id}
-                                title={a.title}
-                                subtitle={a.course}
-                                chips={[
-                                    <DifficultyChip key="difficulty" value={a.difficulty} />,
-                                    <Chip key="points" size='small' label={`${a.points} pts`} variant='outlined' />,
-                                    <Chip key="subs" size='small' label={`Submission: ${submissionCounts[a.title] || 0}`} variant='outlined' />,
-                                    <Chip key="due" size='small' label={`Due: ${a.due || '—'}`} variant='outlined' />,
-                                ]}
-                                onClick={() => setSelectedAssignment(a)}
-                                tabIndex={0}
-                                role='button'
-                            />
+                            <Card key={a.id} variant='outlined' sx={{ display: 'flex', flexDirection: 'column', position: 'relative' }}>
+                                <CardActionArea onClick={() => setSelectedAssignment(a)} sx={{ alignSelf: 'stretch' }}>
+                                    <CardHeader title={<Typography variant='subtitle1' sx={{ fontWeight: 600, lineHeight: 1.2 }}>{a.title}</Typography>} subheader={<Typography variant='caption' color='text.secondary'>{a.course}</Typography>} sx={{ pb: 0 }} />
+                                    <CardContent sx={{ pt: 0, display: 'grid', gap: 1 }}>
+                                        <Box sx={{ display: 'flex', gap: .75, flexWrap: 'wrap' }}>
+                                            <DifficultyChip value={a.difficulty} />
+                                            <Chip size='small' variant='outlined' label={`${a.points} pts`} />
+                                            <Chip size='small' variant='outlined' label={`Subs: ${submissionCounts[a.title] || 0}`} />
+                                        </Box>
+                                        <Typography variant='caption' color='text.secondary'>Due: {a.due || '—'}</Typography>
+                                    </CardContent>
+                                </CardActionArea>
+                            </Card>
                         ))}
                     </TilesGrid>
                     {!filteredAssignments.length && !aLoading && (
