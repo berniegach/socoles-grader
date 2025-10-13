@@ -130,6 +130,27 @@ export async function initSchema() {
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
   );`);
 
+  // Add stable foreign key to assignments and backfill
+  await query(`ALTER TABLE submissions ADD COLUMN IF NOT EXISTS assignment_id UUID REFERENCES assignments(id) ON DELETE CASCADE;`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_submissions_assignment_id ON submissions(assignment_id);`);
+  // Backfill assignment_id using title + owner_id match
+  await query(`UPDATE submissions s
+               SET assignment_id = a.id
+               FROM assignments a
+               WHERE s.assignment_id IS NULL
+                 AND a.title = s.assignment
+                 AND a.owner_id = s.owner_id;`);
+
+  // If no rows remain with NULL assignment_id, enforce NOT NULL constraint
+  try {
+    const { rows: nullCheck } = await query<{ count: string }>(`SELECT COUNT(*)::text as count FROM submissions WHERE assignment_id IS NULL`);
+    if (nullCheck[0] && nullCheck[0].count === '0') {
+      await query(`ALTER TABLE submissions ALTER COLUMN assignment_id SET NOT NULL`);
+    }
+  } catch (e) {
+    // ignore errors here to keep init idempotent
+  }
+
   // New join table for linking questions to assignments (quizzes)
   await query(`CREATE TABLE IF NOT EXISTS assignment_questions (
       assignment_id UUID REFERENCES assignments(id) ON DELETE CASCADE,

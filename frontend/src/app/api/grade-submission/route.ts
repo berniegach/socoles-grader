@@ -26,9 +26,8 @@ async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: numbe
 // Core grading function extracted so we can run inline or in a background job
 async function gradeSubmissionCore(instructorId: string, submissionId: string): Promise<GradeSubmissionResponse> {
     return await withInstructorContext(instructorId, async () => {
-        const subRes = await query<{ id: string; student: string; assignment: string; date: string; grade: number | null; status: string; assignmentId: string }>(
-            `SELECT s.id, s.student, s.assignment, s.date, s.grade::float8 as grade, s.status,
-                            (SELECT a.id FROM assignments a WHERE a.title = s.assignment AND a.owner_id = current_setting('app.current_instructor')::uuid LIMIT 1) as "assignmentId"
+        const subRes = await query<{ id: string; student: string; date: string; grade: number | null; status: string; assignmentId: string }>(
+            `SELECT s.id, s.student, s.date, s.grade::float8 as grade, s.status, s.assignment_id as "assignmentId"
              FROM submissions s WHERE s.id=$1 AND s.owner_id = current_setting('app.current_instructor')::uuid LIMIT 1`, [submissionId]
         );
         if (!subRes.rows.length) throw new Error('Submission not found');
@@ -197,9 +196,9 @@ async function gradeSubmissionCore(instructorId: string, submissionId: string): 
         const numericGrades = perQuestion.map(r => r.grade).filter((g): g is number => typeof g === 'number' && isFinite(g));
         const total = numericGrades.reduce((a, b) => a + (b || 0), 0);
         const finalStatus = anyErrors ? 'Needs review' : 'Auto-graded';
-        const subUpd = await query<{ id: string; student: string; assignment: string; date: string; grade: number; status: string }>(
+        const subUpd = await query<{ id: string; student: string; assignmentId: string; date: string; grade: number; status: string }>(
             `UPDATE submissions SET grade=$2, status=$3 WHERE id=$1 AND owner_id = current_setting('app.current_instructor')::uuid
-             RETURNING id, student, assignment, date, grade::float8 as grade, status`, [submissionId, total, finalStatus]
+             RETURNING id, student, assignment_id as "assignmentId", date, grade::float8 as grade, status`, [submissionId, total, finalStatus]
         );
         const respPayload: GradeSubmissionResponse = { submission: subUpd.rows[0], results: perQuestion, status: finalStatus };
         return respPayload;

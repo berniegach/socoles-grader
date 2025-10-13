@@ -68,9 +68,9 @@ export default function StudentSubmissions({ rows = [] as any[], onRefresh, onOp
         return () => { cancelled = true; };
     }, [user?.token, user?.name, authFetch]);
 
-    const metaByTitle = useMemo(() => {
+    const metaById = useMemo(() => {
         const map = new Map<string, any>();
-        assignmentsMeta.forEach(a => { if (a?.title) map.set(a.title, a); });
+        assignmentsMeta.forEach(a => { if (a?.id) map.set(a.id, a); });
         return map;
     }, [assignmentsMeta]);
 
@@ -100,7 +100,7 @@ export default function StudentSubmissions({ rows = [] as any[], onRefresh, onOp
                 {localRows.map((s: any) => {
                     const isFinished = ['Submitted', 'Auto-graded', 'Needs review'].includes(s.status);
                     const underReview = pendingBySubmission[s.id];
-                    const meta = metaByTitle.get(s.assignment);
+                    const meta = metaById.get(s.assignmentId);
                     const dueMs = parseDueMs(meta?.due);
                     const overdue = !isFinished && !Number.isNaN(dueMs) && dueMs < Date.now();
 
@@ -117,7 +117,7 @@ export default function StudentSubmissions({ rows = [] as any[], onRefresh, onOp
                     return (
                         <GenericTile
                             key={s.id}
-                            onClick={() => onOpenAssignment?.(s.assignment)}
+                            onClick={() => onOpenAssignment?.(meta?.title)}
                             sx={(theme) => ({
                                 minHeight: 160,
                                 borderColor: overdue ? theme.palette.error.main : undefined,
@@ -127,7 +127,7 @@ export default function StudentSubmissions({ rows = [] as any[], onRefresh, onOp
                             {/* Header: Title + difficulty + status chip right */}
                             <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1 }}>
                                 <Box sx={{ flex: 1, minWidth: 0 }}>
-                                    <Typography variant="subtitle2" sx={{ fontWeight: 600, lineHeight: 1.2, pr: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.assignment}</Typography>
+                                    <Typography variant="subtitle2" sx={{ fontWeight: 600, lineHeight: 1.2, pr: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>{meta?.title ?? '—'}</Typography>
                                     <Typography variant="caption" color="text.secondary">{isFinished ? 'Submitted' : 'Started'}: {formatDateTimeDDMMYYYYHHmm(s.date)}</Typography>
                                 </Box>
                                 <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 0.5 }}>

@@ -60,15 +60,16 @@ export async function fetchDashboardMetrics(authFetch: (url: string, init?: Requ
         const submissionsTrend = last7.map(k => ({ date: k, count: countMap[k] || 0 }));
 
         // Question difficulty placeholder: group by assignment name as stand-in
+        const titleById = new Map<string, string>(assignments.map((a: any) => [a.id, a.title]));
         const byAssign: Record<string, { attempts: number; best: number }> = {};
         subs.forEach((s: any) => {
-            const key = s.assignment || 'Unknown';
+            const key = s.assignmentId || 'Unknown';
             if (!byAssign[key]) byAssign[key] = { attempts: 0, best: 0 };
             byAssign[key].attempts += 1;
             const norm = typeof s.grade === 'number' ? (s.grade / 10) : 0;
             if (norm > byAssign[key].best) byAssign[key].best = norm;
         });
-        const questionDifficulty = Object.entries(byAssign).map(([title, v]) => ({ id: title, title, attempts: v.attempts, best: v.best }));
+        const questionDifficulty = Object.entries(byAssign).map(([id, v]) => ({ id, title: titleById.get(id) || id, attempts: v.attempts, best: v.best }));
         const atRisk = questionDifficulty.filter(q => q.attempts >= 3 && q.best < 0.7).slice(0, 5);
 
         // Current proxy: attempts == count of submissions per assignment (NOT per-question attempt history).
@@ -76,7 +77,7 @@ export async function fetchDashboardMetrics(authFetch: (url: string, init?: Requ
         let avgAttempts = questionDifficulty.length ? questionDifficulty.reduce((a, b) => a + b.attempts, 0) / questionDifficulty.length : 0;
         if (avgAttempts < 1 && subs.length) avgAttempts = 1; // placeholder until real attempt histories integrated
 
-        const recent = subs.slice(0, 5).map((s: any) => ({ id: s.id, student: s.student, assignment: s.assignment, date: s.date, grade: typeof s.grade === 'number' ? s.grade / 10 : null, status: s.status }));
+        const recent = subs.slice(0, 5).map((s: any) => ({ id: s.id, student: s.student, assignment: titleById.get(s.assignmentId) || s.assignmentId, date: s.date, grade: typeof s.grade === 'number' ? s.grade / 10 : null, status: s.status }));
 
         return { pendingReviews, avgGrade, passRate, avgAttempts, gradeTrend, submissionsTrend, questionDifficulty, atRisk, recent };
     } catch {

@@ -95,7 +95,7 @@ export default function StudentAssignmentPlayer({ assignmentId, onClose, onSubmi
             const sRes = await authFetch('/api/submissions');
             if (sRes.ok) {
                 const all = await sRes.json();
-                const mine = (all || []).filter((s: any) => s.student === user.name && s.assignment === assignment.title);
+                const mine = (all || []).filter((s: any) => s.student === user.name && s.assignmentId === assignment.id);
                 const final = mine.find((s: any) => s.status === 'Submitted' || s.status === 'Auto-graded' || s.status === 'Needs review');
                 if (final) { setSubmission(final); setSubmitted(true); setIsLocked(true); return final; }
                 const inProg = mine.find((s: any) => s.status === 'In Progress');
@@ -158,7 +158,7 @@ export default function StudentAssignmentPlayer({ assignmentId, onClose, onSubmi
             try {
                 const sRes = await authFetch('/api/submissions');
                 if (!sRes.ok) return; const all = await sRes.json();
-                const existing = (all || []).find((s: any) => s.student === user.name && s.assignment === assignment.title && (s.status === 'Submitted' || s.status === 'Auto-graded' || s.status === 'Needs review'));
+                const existing = (all || []).find((s: any) => s.student === user.name && s.assignmentId === assignment.id && (s.status === 'Submitted' || s.status === 'Auto-graded' || s.status === 'Needs review'));
                 if (existing) {
                     setSubmission(existing);
                     setSubmitted(true);
@@ -179,7 +179,7 @@ export default function StudentAssignmentPlayer({ assignmentId, onClose, onSubmi
                 const sRes = await authFetch('/api/submissions');
                 if (sRes.ok) {
                     const all = await sRes.json();
-                    const mine = (all || []).filter((s: any) => s.student === user.name && s.assignment === assignment.title);
+                    const mine = (all || []).filter((s: any) => s.student === user.name && s.assignmentId === assignment.id);
                     // Treat any graded/final statuses as final (lock)
                     const final = mine.find((s: any) => s.status === 'Submitted' || s.status === 'Auto-graded' || s.status === 'Needs review');
                     if (final) { setSubmission(final); setSubmitted(true); setIsLocked(true); return; }

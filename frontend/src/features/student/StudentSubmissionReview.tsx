@@ -90,7 +90,7 @@ export default function StudentSubmissionReview({ assignmentId, onClose }: Revie
                 let submissionId: string | null = null;
                 if (subs.ok) {
                     const list = await subs.json();
-                    const mine = (list || []).filter((s: any) => s.student === user?.name && s.assignment === assignment?.title);
+                    const mine = (list || []).filter((s: any) => s.student === user?.name && s.assignmentId === assignment?.id);
                     const final = mine.find((s: any) => ['Submitted', 'Auto-graded', 'Needs review'].includes(s.status));
                     submissionId = final?.id || null;
                 }
@@ -111,23 +111,23 @@ export default function StudentSubmissionReview({ assignmentId, onClose }: Revie
                 setHistoryMap(m => ({ ...m, [currentQuestion.id]: { loading: false, attempts: [], error: e?.message || 'Failed' } }));
             }
         })();
-    }, [currentQuestion?.id, assignment?.title, user?.name, user?.token, authFetch]);
+    }, [currentQuestion?.id, assignment?.id, user?.name, user?.token, authFetch]);
 
     // Identify final submission id for this assignment (once) and then load review requests
     useEffect(() => {
-        if (!assignment?.title || !user?.token) return;
+        if (!assignment?.id || !user?.token) return;
         (async () => {
             try {
                 const subs = await authFetch('/api/submissions');
                 if (subs.ok) {
                     const list = await subs.json();
-                    const mine = (list || []).filter((s: any) => s.student === user?.name && s.assignment === assignment.title);
+                    const mine = (list || []).filter((s: any) => s.student === user?.name && s.assignmentId === assignment.id);
                     const final = mine.find((s: any) => ['Submitted', 'Auto-graded', 'Needs review'].includes(s.status));
                     if (final?.id) setSubmissionId(final.id);
                 }
             } catch { /* ignore */ }
         })();
-    }, [assignment?.title, user?.token, user?.name, authFetch]);
+    }, [assignment?.id, user?.token, user?.name, authFetch]);
 
     useEffect(() => {
         if (!submissionId || !assignment?.id || !user?.token) return;

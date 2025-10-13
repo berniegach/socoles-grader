@@ -7,7 +7,7 @@ export interface CourseInstance { id: string; ownerId: string; title: string; co
 
 export interface Assignment { id: string; title: string; course: string; difficulty: string; points: number; due: string; tags: string[]; attemptsAllowed: number; ownerId?: string; courseInstanceId?: string }
 export interface Question { id: string; title: string; difficulty: string; status: string; attempts: number; maxPoints: number; dataset?: string; prompt?: string; modelSql?: string; hints?: string; modelQueries?: string[]; initSql?: string; useDefaultGrading?: boolean; gradingOptions?: GradingOptions; ownerId?: string }
-export interface Submission { id: string; student: string; assignment: string; date: string; grade: number; status: string }
+export interface Submission { id: string; student: string; assignmentId: string; date: string; grade: number; status: string }
 // Lightweight user info used in API responses (avoid exposing token/types)
 export interface UserLite { id: string; name: string; email: string; role: Role }
 // Dataset entity

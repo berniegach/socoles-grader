@@ -24,7 +24,7 @@ import HeaderActions from '@/components/HeaderActions';
 import RefreshIcon from '@mui/icons-material/Refresh';
 
 interface AssignmentApi { id: string; title: string; course: string; difficulty: string; points: number; due: string; tags: string[]; questions?: { id: string }[] }
-interface SubmissionApi { id: string; student: string; assignment: string; date: string; grade: number; status: string }
+interface SubmissionApi { id: string; student: string; assignmentId: string; date: string; grade: number; status: string }
 
 type Tone = 'primary' | 'secondary' | 'success' | 'info' | 'warning' | 'error';
 
@@ -186,14 +186,18 @@ export default function StudentArea({ active }: { active: string }) {
     }, [user?.token, authFetch]);
 
     // Treat 'Submitted', 'Auto-graded', and 'Needs review' as finished
+    const titleById = useMemo(() => new Map(assignments.map(a => [a.id, a.title])), [assignments]);
     const submittedTitles = useMemo(() => {
         const set = new Set<string>();
         const me = user?.name;
         (submissions || []).forEach((s) => {
-            if (s.student === me && (s.status === 'Submitted' || s.status === 'Auto-graded' || s.status === 'Needs review')) set.add(s.assignment);
+            if (s.student === me && (s.status === 'Submitted' || s.status === 'Auto-graded' || s.status === 'Needs review')) {
+                const t = titleById.get(s.assignmentId);
+                if (t) set.add(t);
+            }
         });
         return set;
-    }, [submissions, user?.name]);
+    }, [submissions, user?.name, titleById]);
 
     // Categorize assignments for dashboard
     const categorized = useMemo(() => {
@@ -201,8 +205,10 @@ export default function StudentArea({ active }: { active: string }) {
         const byTitle = new Map<string, SubmissionApi[]>();
         (submissions || []).forEach(s => {
             if (s.student !== me) return;
-            if (!byTitle.has(s.assignment)) byTitle.set(s.assignment, []);
-            byTitle.get(s.assignment)!.push(s);
+            const t = titleById.get(s.assignmentId);
+            if (!t) return;
+            if (!byTitle.has(t)) byTitle.set(t, []);
+            byTitle.get(t)!.push(s);
         });
         const now = Date.now();
         function dueTime(d: string) { const t = parseDueMs(d); return Number.isNaN(t) ? Infinity : t; }
@@ -238,7 +244,7 @@ export default function StudentArea({ active }: { active: string }) {
             let covered = 0;
             const seen = new Set<string>();
             submissions.forEach(s => {
-                if (s.student === me && s.assignment === a.title) { // assignment title used in submissions
+                if (s.student === me && s.assignmentId === a.id) {
                     // we need per-question submissions; rely on question_submissions endpoint when opening player for detailed stats
                     // As a lightweight proxy: if there is at least one submission for the assignment per question count threshold.
                     covered = needed; // fallback: treat as covered when any submission exists
@@ -249,16 +255,41 @@ export default function StudentArea({ active }: { active: string }) {
         return map;
     }, [assignments, submissions, user?.name]);
 
-    // Auto-open survey only when finished, unsurveyed, and fullyAttempted
+    // Auto-open survey only when finished, unsurveyed, fullyAttempted, and eligible
     useEffect(() => {
-        for (const a of categorized.finished) {
-            if (surveyedAssignments.has(a.id)) continue;
-            if (!fullyAttempted.has(a.id)) continue;
-            setSurveyAssignmentId(a.id);
-            setSurveyOpen(true);
-            break;
-        }
-    }, [categorized.finished, surveyedAssignments, fullyAttempted]);
+        let cancelled = false;
+        (async () => {
+            // Iterate candidates deterministically; pre-check eligibility via API to avoid flash open+close
+            const newlySurveyed: string[] = [];
+            for (const a of categorized.finished) {
+                if (surveyedAssignments.has(a.id)) continue;
+                if (!fullyAttempted.has(a.id)) continue;
+                try {
+                    const res = await authFetch(`/api/feedback?assignmentId=${encodeURIComponent(a.id)}`);
+                    if (!res.ok) continue;
+                    const data = await res.json().catch(() => null);
+                    if (cancelled) return;
+                    if (data && data.notEligible) {
+                        // Never show for this assignment; mark as surveyed to suppress
+                        newlySurveyed.push(a.id);
+                        continue;
+                    }
+                    // Eligible: open survey for this assignment
+                    setSurveyAssignmentId(a.id);
+                    setSurveyOpen(true);
+                    return;
+                } catch {
+                    // ignore network errors; try next candidate
+                    continue;
+                }
+            }
+            if (newlySurveyed.length) {
+                // Batch update to avoid multiple renders/loops; use functional set to avoid stale closure
+                setSurveyedAssignments(prev => new Set([...prev, ...newlySurveyed]));
+            }
+        })();
+        return () => { cancelled = true; };
+    }, [categorized.finished, surveyedAssignments, fullyAttempted, authFetch]);
 
     function onSurveyClosed() {
         if (surveyAssignmentId) {
@@ -448,7 +479,8 @@ export default function StudentArea({ active }: { active: string }) {
                                 const target = assignments.find(a => a.title === title);
                                 if (!target) return;
                                 setPlayerAssignmentId(target.id);
-                                const finished = submissions.some(s => s.assignment === title && (s.status === 'Submitted' || s.status === 'Auto-graded' || s.status === 'Needs review'));
+                                const targetId = target.id;
+                                const finished = submissions.some(s => s.assignmentId === targetId && (s.status === 'Submitted' || s.status === 'Auto-graded' || s.status === 'Needs review'));
                                 setReviewMode(finished);
                             }}
                         />

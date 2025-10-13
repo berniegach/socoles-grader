@@ -1,4 +1,4 @@
-import { Dialog, DialogTitle, DialogContent, DialogActions, Button, Typography, Slider, TextField, Box } from '@mui/material';
+import { Dialog, DialogTitle, DialogContent, DialogActions, Button, Typography, Slider, TextField, Box, Stack } from '@mui/material';
 import { useState, useEffect } from 'react';
 
 interface Props {
@@ -27,6 +27,7 @@ export default function FeedbackSurveyDialog({ open, assignmentId, assignmentTit
                 if (res.ok) {
                     const data = await res.json();
                     if (data) {
+                        if ((data as any).notEligible) { onClose(); return; }
                         setHelpedFix(data.helpedFix || null);
                         setImprovedUnderstanding(data.improvedUnderstanding || null);
                         setComment(data.comment || '');
@@ -67,8 +68,32 @@ export default function FeedbackSurveyDialog({ open, assignmentId, assignmentTit
                 <Typography variant="body2" color="text.secondary">Required (takes &lt; 10s). Helps improve the system.</Typography>
                 {improvement != null && (
                     <Box sx={{ p: 1.5, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
-                        <Typography variant="caption" color="text.secondary">Your improvement</Typography>
-                        <Typography variant="body2">First score: {firstScore ?? '—'} • Final score: {finalScore ?? '—'} {improvement != null && firstScore != null && finalScore != null ? ` (Δ ${finalScore - firstScore})` : ''}</Typography>
+                        <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, display: 'block', mb: 0.75 }}>Your improvement</Typography>
+                        {(() => {
+                            const a = typeof firstScore === 'number' ? firstScore : null;
+                            const b = typeof finalScore === 'number' ? finalScore : null;
+                            const isPercentScale = Math.max(a ?? 0, b ?? 0) <= 1;
+                            const fmt = (v: number | null) => v == null ? '—' : (isPercentScale ? `${(v * 100).toFixed(1)}%` : `${v.toFixed(2)}/10`);
+                            const delta = (a != null && b != null) ? (b - a) : null;
+                            const deltaText = delta == null ? '—' : (isPercentScale ? `${(delta * 100).toFixed(1)} pp` : `${delta.toFixed(2)}`);
+                            const deltaColor = !delta ? 'text.secondary' : (delta > 0 ? 'success.main' : (delta < 0 ? 'error.main' : 'text.secondary'));
+                            return (
+                                <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(3, 1fr)' }, gap: 1 }}>
+                                    <Box sx={{ p: 1, borderRadius: 1, border: '1px solid', borderColor: 'divider' }}>
+                                        <Typography variant="caption" color="text.secondary">First</Typography>
+                                        <Typography variant="subtitle2">{fmt(a)}</Typography>
+                                    </Box>
+                                    <Box sx={{ p: 1, borderRadius: 1, border: '1px solid', borderColor: 'divider' }}>
+                                        <Typography variant="caption" color="text.secondary">Final</Typography>
+                                        <Typography variant="subtitle2">{fmt(b)}</Typography>
+                                    </Box>
+                                    <Box sx={{ p: 1, borderRadius: 1, border: '1px solid', borderColor: 'divider' }}>
+                                        <Typography variant="caption" color="text.secondary">Change</Typography>
+                                        <Typography variant="subtitle2" sx={{ color: deltaColor }}>{deltaText}</Typography>
+                                    </Box>
+                                </Box>
+                            );
+                        })()}
                     </Box>
                 )}
                 <Box>

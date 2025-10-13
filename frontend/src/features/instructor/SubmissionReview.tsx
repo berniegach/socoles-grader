@@ -69,7 +69,7 @@ export default function SubmissionReview() {
                 const arr: any[] = Array.isArray(data) ? data : [];
                 const counts: Record<string, number> = {};
                 for (const s of arr) {
-                    const key = s.assignment;
+                    const key = s.assignmentId;
                     if (!key) continue;
                     counts[key] = (counts[key] || 0) + 1;
                 }
@@ -84,19 +84,19 @@ export default function SubmissionReview() {
 
     // Load submissions for selected assignment
     useEffect(() => {
-        async function loadForAssignment(title: string) {
+        async function loadForAssignment(aId: string) {
             setLoading(true);
             if (!user?.token) { setLoading(false); return; }
             try {
                 const res = await authFetch('/api/submissions');
                 const data = await res.json();
                 const arr: SubmissionWithQuestions[] = Array.isArray(data) ? data : [];
-                setRows(arr.filter((s: any) => s.assignment === title));
+                setRows(arr.filter((s: any) => s.assignmentId === aId));
             } catch { setRows([] as any); } finally { setLoading(false); }
         }
-        if (selectedAssignment) { setSelectedSubmissionId(null); void loadForAssignment(selectedAssignment.title); }
+        if (selectedAssignment) { setSelectedSubmissionId(null); void loadForAssignment(selectedAssignment.id); }
         else { setRows([] as any); setSelectedSubmissionId(null); }
-    }, [selectedAssignment?.title, user?.token, authFetch]);
+    }, [selectedAssignment?.id, user?.token, authFetch]);
     async function loadQuestions(submissionId: string) {
         try {
             const res = await authFetch(`/api/question-submissions?submissionId=${submissionId}`);
@@ -232,7 +232,7 @@ export default function SubmissionReview() {
                                         <Box sx={{ display: 'flex', gap: .75, flexWrap: 'wrap' }}>
                                             <DifficultyChip value={a.difficulty} />
                                             <Chip size='small' variant='outlined' label={`${a.points} pts`} />
-                                            <Chip size='small' variant='outlined' label={`Subs: ${submissionCounts[a.title] || 0}`} />
+                                            <Chip size='small' variant='outlined' label={`Subs: ${submissionCounts[a.id] || 0}`} />
                                         </Box>
                                         <Typography variant='caption' color='text.secondary'>Due: {a.due || '—'}</Typography>
                                     </CardContent>

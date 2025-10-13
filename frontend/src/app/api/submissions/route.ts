@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
         const instructorId = payload.role === 'student' ? (payload.instructorId as string) : payload.sub;
         const meEmail = payload.role === 'student' ? payload.email : undefined;
         const { rows } = await withInstructorContext(instructorId, () => query(`
-                        SELECT id, student, assignment, date, grade::float8 as grade, status
+            SELECT id, student, assignment_id as "assignmentId", date, grade::float8 as grade, status
                         FROM submissions
                         WHERE owner_id = current_setting('app.current_instructor')::uuid
                             ${meEmail ? 'AND student = $1' : ''}
@@ -35,15 +35,20 @@ export async function POST(req: Request) {
         if (!token) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
         const payload = verifyJwt(token);
         if (!payload) return NextResponse.json({ error: 'invalid token' }, { status: 401 });
-        const body: Partial<Submission> & { date?: string } = await req.json();
-        const { student, assignment, date, grade, status } = body;
-        if (!student || !assignment) return NextResponse.json({ error: 'student & assignment required' }, { status: 400 });
+        const body: Partial<Submission> & { date?: string; assignment?: string } = await req.json();
+        const { student, assignment: assignmentTitle, date, grade, status } = body as any;
+        if (!student || !assignmentTitle) return NextResponse.json({ error: 'student & assignment required' }, { status: 400 });
         const instructorId = payload.role === 'student' ? (payload.instructorId as string) : payload.sub;
+        // Resolve assignment_id by title for this owner; insert both assignment (title) and assignment_id
+        const { rows: aRows } = await withInstructorContext(instructorId, () => query<{ id: string }>(
+            `SELECT id FROM assignments WHERE title=$1 AND owner_id = current_setting('app.current_instructor')::uuid ORDER BY created_at DESC LIMIT 1`, [assignmentTitle]
+        ));
+        const assignmentId = aRows[0]?.id || null;
         const { rows } = await withInstructorContext(instructorId, () => query<Submission>(
-            `INSERT INTO submissions (student, assignment, date, grade, status, owner_id)
-             VALUES ($1,$2,$3,$4,$5,current_setting('app.current_instructor')::uuid)
-             RETURNING id, student, assignment, date, grade::float8 as grade, status`,
-            [student, assignment, date || new Date().toISOString(), grade ?? 0, status || 'Pending']
+            `INSERT INTO submissions (student, assignment, assignment_id, date, grade, status, owner_id)
+             VALUES ($1,$2,$3,$4,$5,$6,current_setting('app.current_instructor')::uuid)
+             RETURNING id, student, assignment_id as "assignmentId", date, grade::float8 as grade, status`,
+            [student, assignmentTitle, assignmentId, date || new Date().toISOString(), grade ?? 0, status || 'Pending']
         ));
         return NextResponse.json(rows[0]);
     } catch (e) {
@@ -63,7 +68,7 @@ export async function PATCH(req: Request) {
         const { id, grade, status } = body || {};
         if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
         const instructorId = payload.role === 'student' ? (payload.instructorId as string) : payload.sub;
-        const { rows } = await withInstructorContext(instructorId, () => query<Submission>(`UPDATE submissions SET grade=COALESCE($2, grade), status=COALESCE($3,status) WHERE id=$1 AND owner_id = current_setting('app.current_instructor')::uuid RETURNING id, student, assignment, date, grade::float8 as grade, status`, [id, grade, status]));
+        const { rows } = await withInstructorContext(instructorId, () => query<Submission>(`UPDATE submissions SET grade=COALESCE($2, grade), status=COALESCE($3,status) WHERE id=$1 AND owner_id = current_setting('app.current_instructor')::uuid RETURNING id, student, assignment_id as "assignmentId", date, grade::float8 as grade, status`, [id, grade, status]));
         if (!rows.length) return NextResponse.json({ error: 'Not found' }, { status: 404 });
         return NextResponse.json(rows[0]);
     } catch (e) {

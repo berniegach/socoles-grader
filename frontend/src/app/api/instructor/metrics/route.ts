@@ -16,10 +16,11 @@ export async function GET(req: NextRequest) {
         const instructorId = payload.role === 'student' ? (payload.instructorId as string) : payload.sub;
         return await withInstructorContext(instructorId, async () => {
             // 1. Submissions (recent scope) – limit for safety
-            const { rows: submissions } = await query(`SELECT id, student, assignment, date, grade::float8 as grade, status, created_at
-            FROM submissions
-            WHERE owner_id = current_setting('app.current_instructor')::uuid
-            ORDER BY created_at DESC
+            const { rows: submissions } = await query(`SELECT s.id, s.student, s.assignment_id as "assignmentId", a.title as assignment, s.date, s.grade::float8 as grade, s.status, s.created_at
+            FROM submissions s
+            LEFT JOIN assignments a ON a.id = s.assignment_id
+            WHERE s.owner_id = current_setting('app.current_instructor')::uuid
+            ORDER BY s.created_at DESC
             LIMIT 2000`);
 
             // Helper: normalize grade assumed 0..10 or already 0..1
@@ -60,7 +61,7 @@ export async function GET(req: NextRequest) {
             const atRisk = questionDifficulty.filter(q => q.attempts >= 3 && q.best < 0.7).slice(0, 5);
             const avgAttempts = questionDifficulty.length ? questionDifficulty.reduce((a, b) => a + b.attempts, 0) / questionDifficulty.length : 0;
 
-            const recent = submissions.slice(0, 5).map((s: any) => ({ id: s.id, student: s.student, assignment: s.assignment, date: s.date, grade: norm(s.grade), status: s.status }));
+            const recent = submissions.slice(0, 5).map((s: any) => ({ id: s.id, student: s.student, assignment: s.assignment || s.assignmentId, date: s.date, grade: norm(s.grade), status: s.status }));
 
             return NextResponse.json({ pendingReviews, avgGrade, passRate, avgAttempts, gradeTrend, submissionsTrend, questionDifficulty, atRisk, recent });
         });

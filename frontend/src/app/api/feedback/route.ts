@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { initSchema, withInstructorContext, query } from '@/lib/db';
+import { computeAssignmentImprovement, computeSurveyEligibility } from '@/lib/feedbackStats';
 import { parseAuthHeader, verifyJwt } from '@/lib/auth';
 
 let initialized = false;
@@ -72,7 +73,15 @@ export async function GET(req: Request) {
         }
         if (assignmentId) {
             const { rows } = await withInstructorContext(instructorId, () => query<any>(`SELECT assignment_id as "assignmentId", student, helped_fix as "helpedFix", improved_understanding as "improvedUnderstanding", comment, first_score as "firstScore", final_score as "finalScore", attempt_count as "attemptCount", improvement FROM assignment_feedback_survey WHERE assignment_id=$1 AND owner_id = current_setting('app.current_instructor')::uuid${isStudent ? ' AND student=$2' : ''} LIMIT 1`, isStudent ? [assignmentId, payload.name] : [assignmentId]));
-            return NextResponse.json(rows[0] || null);
+            if (rows[0]) return NextResponse.json(rows[0]);
+            // Preview stats for student before submitting the survey
+            if (isStudent) {
+                const eligible = await computeSurveyEligibility({ instructorId, assignmentId, studentName: payload.name, studentEmail: payload.email });
+                if (eligible.perfectOnFirstTry) return NextResponse.json({ notEligible: true });
+                const stats = await computeAssignmentImprovement({ instructorId, assignmentId, studentName: payload.name, studentEmail: payload.email });
+                return NextResponse.json(stats);
+            }
+            return NextResponse.json(null);
         }
         if (isStudent) {
             const { rows } = await withInstructorContext(instructorId, () => query<any>(`SELECT assignment_id as "assignmentId" FROM assignment_feedback_survey WHERE student=$1 AND owner_id = current_setting('app.current_instructor')::uuid`, [payload.name]));
@@ -100,23 +109,16 @@ export async function POST(req: Request) {
         const { assignmentId, helpedFix, improvedUnderstanding, comment } = body || {};
         if (!assignmentId || !helpedFix || !improvedUnderstanding) return NextResponse.json({ error: 'missing fields' }, { status: 400 });
 
-        // Compute improvement metrics: first vs final submission for this assignment & student
+        // Compute improvement metrics using shared utility
         const instructorId = payload.instructorId as string;
-        const student = payload.name as string;
-        const { rows: subs } = await withInstructorContext(instructorId, () => query<any>(`SELECT grade FROM submissions WHERE assignment=$1 AND student=$2 AND owner_id = current_setting('app.current_instructor')::uuid ORDER BY created_at ASC`, [assignmentId, student]));
-        let firstScore: number | null = null; let finalScore: number | null = null; let attemptCount: number | null = null; let improvement: number | null = null;
-        if (subs.length) {
-            firstScore = subs[0].grade;
-            finalScore = subs[subs.length - 1].grade;
-            attemptCount = subs.length;
-            if (firstScore != null && finalScore != null) improvement = finalScore - firstScore;
-        }
+        const stats = await computeAssignmentImprovement({ instructorId, assignmentId, studentName: payload.name, studentEmail: payload.email });
+        const { firstScore, finalScore, attemptCount, improvement } = stats;
 
         const { rows } = await withInstructorContext(instructorId, () => query<any>(`INSERT INTO assignment_feedback_survey (assignment_id, student, owner_id, helped_fix, improved_understanding, comment, first_score, final_score, attempt_count, improvement)
             VALUES ($1,$2,current_setting('app.current_instructor')::uuid,$3,$4,$5,$6,$7,$8,$9)
             ON CONFLICT (assignment_id, student, owner_id)
             DO UPDATE SET helped_fix=EXCLUDED.helped_fix, improved_understanding=EXCLUDED.improved_understanding, comment=EXCLUDED.comment, first_score=EXCLUDED.first_score, final_score=EXCLUDED.final_score, attempt_count=EXCLUDED.attempt_count, improvement=EXCLUDED.improvement
-            RETURNING assignment_id as "assignmentId", student, helped_fix as "helpedFix", improved_understanding as "improvedUnderstanding", comment, first_score as "firstScore", final_score as "finalScore", attempt_count as "attemptCount", improvement`, [assignmentId, student, helpedFix, improvedUnderstanding, comment || null, firstScore, finalScore, attemptCount, improvement]));
+            RETURNING assignment_id as "assignmentId", student, helped_fix as "helpedFix", improved_understanding as "improvedUnderstanding", comment, first_score as "firstScore", final_score as "finalScore", attempt_count as "attemptCount", improvement`, [assignmentId, (payload.name || payload.email), helpedFix, improvedUnderstanding, comment || null, firstScore, finalScore, attemptCount, improvement]));
         return NextResponse.json(rows[0]);
     } catch (e) {
         console.error('[feedback.POST] error', e);

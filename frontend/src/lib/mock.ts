@@ -8,8 +8,8 @@ export const demoAssignments: Assignment[] = [
 
 
 export const demoSubmissions: Submission[] = [
-    { id: 's1', student: 'A. Janssen', assignment: 'Basic SELECT & WHERE', date: '2025-08-28 16:02', grade: 8.5, status: 'Auto-graded' },
-    { id: 's2', student: 'M. de Vries', assignment: 'JOINs & Aggregates', date: '2025-08-27 10:41', grade: 6.0, status: 'Needs review' },
+    { id: 's1', student: 'A. Janssen', assignmentId: 'a1', date: '2025-08-28 16:02', grade: 8.5, status: 'Auto-graded' },
+    { id: 's2', student: 'M. de Vries', assignmentId: 'a2', date: '2025-08-27 10:41', grade: 6.0, status: 'Needs review' },
 ];
 
 
