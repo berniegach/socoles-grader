@@ -141,7 +141,7 @@ export interface GradeSubmissionResponse {
 
 // Class roster
 export type RosterStatus = 'Pending' | 'Invited' | 'Active' | 'Dropped';
-export interface RosterEntry { id: string; name: string; email: string; status: RosterStatus }
+export interface RosterEntry { id: string; name: string; email: string; status: RosterStatus; evaluator?: boolean }
 export interface NewRosterEntry { name: string; email: string; status?: RosterStatus }
 
 // Invites

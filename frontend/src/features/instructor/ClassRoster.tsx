@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useState, useRef } from 'react';
-import { Box, Button, Card, CardContent, Chip, LinearProgress, Snackbar, Alert, Table, TableBody, TableCell, TableHead, TableRow, TextField, Stack, IconButton, Tooltip, Typography } from '@mui/material';
+import { Box, Button, Card, CardContent, Chip, LinearProgress, Snackbar, Alert, Table, TableBody, TableCell, TableHead, TableRow, TextField, Stack, IconButton, Tooltip, Typography, Switch, FormControlLabel } from '@mui/material';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
@@ -186,6 +186,7 @@ export default function ClassRoster() {
                             <TableCell>Name</TableCell>
                             <TableCell>Email</TableCell>
                             <TableCell>Status</TableCell>
+                            <TableCell>Privileges</TableCell>
                             <TableCell align="right">Actions</TableCell>
                         </TableRow>
                     </TableHead>
@@ -201,6 +202,27 @@ export default function ClassRoster() {
                                         color={r.status === 'Active' ? 'success' : r.status === 'Invited' ? 'primary' : r.status === 'Pending' ? 'warning' : 'default'}
                                         variant={r.status === 'Invited' || r.status === 'Pending' ? 'outlined' : 'filled'}
                                     />
+                                </TableCell>
+                                <TableCell>
+                                    <Tooltip title="Teaching Assistant" arrow>
+                                        <FormControlLabel
+                                            control={<Switch size="small" checked={!!r.evaluator} onChange={async (_, checked) => {
+                                                try {
+                                                    setBusy(true);
+                                                    const res = await authFetch('/api/roster', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: r.id, evaluator: checked }) });
+                                                    const data = await res.json();
+                                                    if (!res.ok) throw new Error(data?.error || 'Failed to update');
+                                                    setRows(rows => rows.map(x => x.id === r.id ? { ...x, evaluator: data.evaluator } : x));
+                                                    setNote(checked ? 'Granted Teaching Assistant privilege' : 'Revoked Teaching Assistant privilege');
+                                                } catch (e: any) {
+                                                    setErr(e.message || 'Update failed');
+                                                } finally {
+                                                    setBusy(false);
+                                                }
+                                            }} />}
+                                            label="TA"
+                                        />
+                                    </Tooltip>
                                 </TableCell>
                                 <TableCell align="right">
                                     {r.status === 'Pending' && (

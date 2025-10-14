@@ -15,7 +15,7 @@ export async function GET(req: Request) {
         if (!payload) return NextResponse.json({ error: 'invalid token' }, { status: 401 });
 
         const { rows } = await withInstructorContext(payload.sub, () => query<RosterEntry>(
-            `SELECT id, name, email, status FROM roster WHERE owner_id = current_setting('app.current_instructor')::uuid ORDER BY created_at DESC LIMIT 1000`
+            `SELECT id, name, email, status, evaluator FROM roster WHERE owner_id = current_setting('app.current_instructor')::uuid ORDER BY created_at DESC LIMIT 1000`
         ));
         return NextResponse.json(rows);
     } catch (e) {
@@ -46,7 +46,7 @@ export async function POST(req: Request) {
                     `INSERT INTO roster (name, email, status, owner_id)
            VALUES ($1,$2,$3,current_setting('app.current_instructor')::uuid)
            ON CONFLICT (owner_id, email) DO UPDATE SET name=EXCLUDED.name, status=EXCLUDED.status
-           RETURNING id, name, email, status`,
+           RETURNING id, name, email, status, evaluator`,
                     [name, email, status]
                 );
                 if (rows[0]) inserted.push(rows[0]);
@@ -90,7 +90,7 @@ export async function PATCH(req: Request) {
         if (!payload) return NextResponse.json({ error: 'invalid token' }, { status: 401 });
 
         const body = await req.json();
-        const { id, name, email, status } = body || {};
+        const { id, name, email, status, evaluator } = body || {};
         if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
         if (typeof status !== 'undefined') {
             // status is system-managed via the invite lifecycle; block manual changes
@@ -98,11 +98,12 @@ export async function PATCH(req: Request) {
         }
         const { rows } = await withInstructorContext(payload.sub, () => query(
             `UPDATE roster SET 
-               name=COALESCE($2, name),
-               email=COALESCE($3, email)
-             WHERE id=$1 AND owner_id = current_setting('app.current_instructor')::uuid
-             RETURNING id, name, email, status`,
-            [id, name ?? null, email ?? null]
+                             name=COALESCE($2, name),
+                             email=COALESCE($3, email),
+                             evaluator=COALESCE($4, evaluator)
+                         WHERE id=$1 AND owner_id = current_setting('app.current_instructor')::uuid
+                         RETURNING id, name, email, status, evaluator`,
+            [id, name ?? null, email ?? null, typeof evaluator === 'boolean' ? evaluator : null]
         ));
         if (!rows.length) return NextResponse.json({ error: 'Not found' }, { status: 404 });
         return NextResponse.json(rows[0]);

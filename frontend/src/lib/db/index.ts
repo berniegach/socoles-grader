@@ -259,9 +259,12 @@ export async function initSchema() {
     name TEXT NOT NULL,
     email TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'Invited',
+    evaluator BOOLEAN NOT NULL DEFAULT false,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE(owner_id, email)
   );`);
+  // Backfill new evaluator column for existing deployments
+  await query(`ALTER TABLE roster ADD COLUMN IF NOT EXISTS evaluator BOOLEAN NOT NULL DEFAULT false;`);
 
   // Invite tokens for students to join a class roster
   await query(`CREATE TABLE IF NOT EXISTS invites (
