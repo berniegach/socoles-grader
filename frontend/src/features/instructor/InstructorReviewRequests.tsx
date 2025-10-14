@@ -168,7 +168,6 @@ export default function InstructorReviewRequests() {
         ]} />
     ) : (
         <HeaderActions actions={[
-            { key: 'back', label: 'Back', ariaLabel: 'Back to dashboard', onClick: () => window.dispatchEvent(new CustomEvent('appshell:navigate', { detail: { id: 'i-dash' } })), icon: <ArrowBackIcon fontSize='small' /> },
             { key: 'refresh', label: 'Refresh', ariaLabel: 'Refresh', onClick: () => load(), icon: <RefreshIcon fontSize='small' /> }
         ]} />
     );

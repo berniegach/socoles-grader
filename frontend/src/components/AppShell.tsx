@@ -8,6 +8,7 @@ import GroupIcon from '@mui/icons-material/GroupOutlined';
 import AssignmentIcon from '@mui/icons-material/AssignmentTurnedInOutlined';
 import CloudUploadIcon from '@mui/icons-material/CloudUploadOutlined';
 import SettingsIcon from '@mui/icons-material/SettingsOutlined';
+import RateReviewIcon from '@mui/icons-material/RateReviewOutlined';
 import StorageIcon from '@mui/icons-material/StorageOutlined';
 import LogoutIcon from '@mui/icons-material/Logout';
 
@@ -38,6 +39,7 @@ export default function AppShell() {
                 { id: 'i-datasets', label: 'Datasets', icon: StorageIcon },
                 { id: 'i-batch', label: 'Batch Grader', icon: CloudUploadIcon },
                 { id: 'i-submissions', label: 'Submissions', icon: DescriptionIcon },
+                { id: 'i-reviews', label: 'Reviews', icon: RateReviewIcon },
                 { id: 'i-class', label: 'Class', icon: GroupIcon },
                 { id: 'i-settings', label: 'Settings', icon: SettingsIcon },
             ],
