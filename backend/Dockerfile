@@ -35,7 +35,7 @@ RUN git clone --depth 1 https://github.com/duckdb/duckdb.git /tmp/duckdb \
     -DCMAKE_INSTALL_PREFIX=/usr/local \
     .. \
     # to avoid memory issues, limit parallel jobs to 2
-    && make -j2 install \ 
+    && make -j2 install \
     && rm -rf /tmp/duckdb                            
 
 
@@ -52,13 +52,11 @@ FROM debian:bookworm-slim
 # Install only the required runtime shared libraries (no .-dev packages)
 RUN apt-get update && apt-get install -y \
     libpq5 \
-    libpqxx-6.4 \
     libboost-program-options1.74.0 \
     libboost-system1.74.0 \
     libboost-thread1.74.0 \
     libssl3 \
     zlib1g \
-    libpg-query1504.0 \
     && rm -rf /var/lib/apt/lists/*
 
 # copy the compiled server
@@ -66,7 +64,11 @@ COPY --from=builder /app/build/socoles_server /usr/local/bin/socoles_server
 
 # copy DuckDB’s shared libs from builder to ensure they load at runtime
 COPY --from=builder /usr/local/lib/libduckdb.so* /usr/local/lib/
+# copy required shared libs from builder to avoid version-locked runtime packages
+COPY --from=builder /usr/lib/x86_64-linux-gnu/libpg_query.so* /usr/local/lib/
+COPY --from=builder /usr/lib/x86_64-linux-gnu/libpqxx.so* /usr/local/lib/
 RUN ldconfig                                         # update linker cache 
 
 
+EXPOSE 5000
 ENTRYPOINT ["socoles_server"]

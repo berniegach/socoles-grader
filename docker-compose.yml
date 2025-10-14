@@ -19,7 +19,8 @@ services:
       retries: 5
 
   backend:
-    image: ${BACKEND_IMAGE:-ghcr.io/berniegach/socoles-backend:1.0.0}
+    image: ${BACKEND_IMAGE:-ghcr.io/berniegach/socoles-backend:1.0.1}
+    # Uncomment to build locally instead of pulling
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -33,15 +34,23 @@ services:
     env_file:
       - .env
     environment:
+      - PORT=5000
+      - CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
       # Backend connects to secondary grader DB
       - PGHOST=db
       - PGPORT=5432
       - PGUSER=socoles-web
       - PGPASSWORD=${POSTGRES_PASSWORD}
       - PGDATABASE=grader
+    healthcheck:
+      test: [ "CMD", "curl", "-fsS", "http://localhost:5000/health" ]
+      interval: 10s
+      timeout: 3s
+      retries: 5
 
   frontend:
-    image: ${FRONTEND_IMAGE:-ghcr.io/berniegach/socoles-frontend:1.0.0}
+    image: ${FRONTEND_IMAGE:-ghcr.io/berniegach/socoles-frontend:1.0.1}
+    # Uncomment to build locally instead of pulling
     build:
       context: ./frontend
       dockerfile: Dockerfile
@@ -64,5 +73,10 @@ services:
       - PGDATABASE=manageclass
       # HOST optional for Next.js listen address; uncomment if needed
       # - HOST=0.0.0.0
+    healthcheck:
+      test: [ "CMD", "bash", "-lc", "node -e 'http.get(process.env.NEXT_PUBLIC_SOCOLES_API_URL||\"http://backend:5000\",r=>{process.exit(r.statusCode===200?0:1)}).on(\"error\",()=>process.exit(1))' " ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
 volumes:
   pg_data:

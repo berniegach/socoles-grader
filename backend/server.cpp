@@ -2,6 +2,9 @@
 #include <crow/middlewares/cors.h>
 #include <string>
 #include <vector>
+#include <cstdlib>
+#include <sstream>
+#include <algorithm>
 #include <nlohmann/json.hpp>
 #include "goals.h"
 #include "abstract_syntax_tree.h"
@@ -21,15 +24,47 @@ int main()
 
     auto &cors = app.get_middleware<crow::CORSHandler>();
 
+    // Resolve server port and CORS origins from environment for portability
+    int port = 5000;
+    if (const char *penv = std::getenv("PORT"))
+    {
+        try
+        {
+            port = std::max(1, std::stoi(penv));
+        }
+        catch (...)
+        {
+            port = 5000;
+        }
+    }
+    std::vector<std::string> origins;
+    if (const char *oenv = std::getenv("CORS_ORIGINS"))
+    {
+        std::stringstream ss(oenv);
+        std::string item;
+        while (std::getline(ss, item, ','))
+        {
+            // trim spaces
+            item.erase(item.begin(), std::find_if(item.begin(), item.end(), [](unsigned char ch)
+                                                  { return !std::isspace(ch); }));
+            item.erase(std::find_if(item.rbegin(), item.rend(), [](unsigned char ch)
+                                    { return !std::isspace(ch); })
+                           .base(),
+                       item.end());
+            if (!item.empty())
+                origins.push_back(item);
+        }
+    }
+    if (origins.empty())
+    {
+        // Sensible defaults for local dev and docker-compose
+        origins = {"http://localhost:3000", "http://127.0.0.1:3000", "http://frontend:3000"};
+    }
+
     // Configure CORS settings
-    cors
-        .global()
-        //.origin("http://frontend:3000") // Specify allowed origin(s)
-        .origin("http://localhost:3000") // Allow localhost for development
-        //.origin("http://127.0.0.1:3000")
-        .methods("POST"_method, "OPTIONS"_method)
-        .headers("Content-Type", "Authorization")
-        .max_age(86400); // Optional: Cache preflight response
+    auto corsCfg = cors.global().methods("GET"_method, "POST"_method, "OPTIONS"_method).headers("Content-Type", "Authorization").max_age(86400);
+    for (const auto &o : origins)
+        corsCfg.origin(o);
 
     CROW_ROUTE(app, "/parse-queries").methods(crow::HTTPMethod::POST, crow::HTTPMethod::OPTIONS)([&goals](const crow::request &req)
                                                                                                  {
@@ -295,7 +330,11 @@ int main()
                                                                                                          return res;
                                                                                                      } });
 
-    app.port(5000).multithreaded().run();
+    // Lightweight health endpoint for orchestration
+    CROW_ROUTE(app, "/health").methods(crow::HTTPMethod::GET)([]()
+                                                              { return crow::response(200, "ok"); });
+
+    app.port(port).multithreaded().run();
 }
 
 Grader::grading_options set_grading_options(int syntax, int semantics, int results, int order_of_importance)
