@@ -39,7 +39,14 @@ export async function GET(req: NextRequest) {
             const graded = submissions.filter((s: any) => typeof s.grade === 'number');
             const avgGrade = graded.length ? graded.reduce((a: number, s: any) => a + norm(s.grade), 0) / graded.length : 0;
             const passRate = graded.length ? graded.filter((s: any) => norm(s.grade) >= 0.6).length / graded.length : 0;
-            const pendingReviews = submissions.filter((s: any) => (s.status || '').toLowerCase().includes('needs')).length;
+            // Pending reviews should reflect open instructor review requests, not submission statuses.
+            const { rows: prCountRows } = await query(
+                `SELECT COUNT(*)::int AS count
+                                 FROM question_review_requests
+                                 WHERE owner_id = current_setting('app.current_instructor')::uuid
+                                     AND status ILIKE 'pending'`
+            );
+            const pendingReviews = Number(prCountRows?.[0]?.count || 0);
 
             // 2. Question difficulty / attempts from attempts history
             const { rows: difficultyRaw } = await query(`
