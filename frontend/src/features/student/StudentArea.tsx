@@ -1,5 +1,5 @@
 'use client';
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, useCallback, useRef } from 'react';
 import type { ElementType } from 'react';
 import {
     Box, Card, CardHeader, CardContent, CardActions, Typography, Chip, Button, Divider
@@ -158,32 +158,59 @@ export default function StudentArea({ active }: { active: string }) {
     const [surveyedAssignments, setSurveyedAssignments] = useState<Set<string>>(new Set());
     const { user, authFetch } = useAuth();
 
-    useEffect(() => {
-        if (!user?.token) return; // wait for auth token
-        async function load() {
-            setLoading(true);
-            try {
-                const [aRes, sRes, fRes] = await Promise.all([
-                    authFetch('/api/assignments?include=questions'),
-                    authFetch('/api/submissions'),
-                    authFetch('/api/feedback')
-                ]);
-                const aData = await aRes.json();
-                const sData = await sRes.json();
-                let fData: any[] = [];
-                try { fData = await fRes.json(); } catch { /* ignore */ }
-                setAssignments(Array.isArray(aData) ? aData : []);
-                setSubmissions(Array.isArray(sData) ? sData : []);
-                if (Array.isArray(fData)) {
-                    const set = new Set<string>();
-                    fData.forEach(r => { if (r.assignmentId) set.add(r.assignmentId); });
-                    setSurveyedAssignments(set);
-                }
-            } catch { /* ignore for now */ }
-            finally { setLoading(false); }
+    // Centralized data loader with simple throttling
+    const lastLoadRef = useRef<number>(0);
+    const loadingRef = useRef<boolean>(false);
+    const loadData = useCallback(async (_reason?: 'initial' | 'focus' | 'visible' | 'interval' | 'manual') => {
+        if (!user?.token) return;
+        const now = Date.now();
+        if (loadingRef.current) return;
+        if (_reason === 'interval' && now - lastLoadRef.current < 10000) return; // throttle interval to >=10s
+        loadingRef.current = true;
+        setLoading(true);
+        try {
+            const [aRes, sRes, fRes] = await Promise.all([
+                authFetch('/api/assignments?include=questions'),
+                authFetch('/api/submissions'),
+                authFetch('/api/feedback')
+            ]);
+            const aData = aRes.ok ? await aRes.json() : [];
+            const sData = sRes.ok ? await sRes.json() : [];
+            let fData: any[] = [];
+            try { fData = fRes.ok ? await fRes.json() : []; } catch { /* ignore */ }
+            setAssignments(Array.isArray(aData) ? aData : []);
+            setSubmissions(Array.isArray(sData) ? sData : []);
+            if (Array.isArray(fData)) {
+                const set = new Set<string>();
+                fData.forEach((r: any) => { if (r.assignmentId) set.add(r.assignmentId); });
+                setSurveyedAssignments(set);
+            }
+        } catch { /* ignore for now */ }
+        finally {
+            setLoading(false);
+            loadingRef.current = false;
+            lastLoadRef.current = Date.now();
         }
-        void load();
     }, [user?.token, authFetch]);
+
+    // Initial load
+    useEffect(() => { void loadData('initial'); }, [loadData]);
+
+    // Auto-refresh on window focus and when tab becomes visible
+    useEffect(() => {
+        function onFocus() { void loadData('focus'); }
+        function onVis() { if (!document.hidden) void loadData('visible'); }
+        window.addEventListener('focus', onFocus);
+        document.addEventListener('visibilitychange', onVis);
+        return () => { window.removeEventListener('focus', onFocus); document.removeEventListener('visibilitychange', onVis); };
+    }, [loadData]);
+
+    // Light polling to pick up instructor changes without manual refresh
+    useEffect(() => {
+        if (!user?.token) return;
+        const id = setInterval(() => { void loadData('interval'); }, 30000); // every 30s
+        return () => clearInterval(id);
+    }, [user?.token, loadData]);
 
     // Treat 'Submitted', 'Auto-graded', and 'Needs review' as finished
     const titleById = useMemo(() => new Map(assignments.map(a => [a.id, a.title])), [assignments]);
@@ -377,7 +404,7 @@ export default function StudentArea({ active }: { active: string }) {
                 <PageCard
                     headerTitle='Dashboard'
                     headerProps={{ height: 56 }}
-                    headerActions={<HeaderActions actions={[{ key: 'refresh-dash', label: 'Refresh', ariaLabel: 'Refresh data', icon: <RefreshIcon fontSize='small' />, onClick: () => { /* simple reload */ window.dispatchEvent(new Event('focus')); } }]} />}
+                    headerActions={<HeaderActions actions={[{ key: 'refresh-dash', label: 'Refresh', ariaLabel: 'Refresh data', icon: <RefreshIcon fontSize='small' />, onClick: () => { void loadData('manual'); } }]} />}
                     headerActionsVariant='plain'
                 >
                     <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { md: 'repeat(3,1fr)', xs: '1fr' } }}>
@@ -429,7 +456,7 @@ export default function StudentArea({ active }: { active: string }) {
                 <PageCard
                     headerTitle='Assignments'
                     headerProps={{ height: 56 }}
-                    headerActions={<HeaderActions actions={[{ key: 'refresh-assign', label: 'Refresh', ariaLabel: 'Refresh assignments', icon: <RefreshIcon fontSize='small' />, onClick: () => window.dispatchEvent(new Event('focus')) }]} />}
+                    headerActions={<HeaderActions actions={[{ key: 'refresh-assign', label: 'Refresh', ariaLabel: 'Refresh assignments', icon: <RefreshIcon fontSize='small' />, onClick: () => { void loadData('manual'); } }]} />}
                     headerActionsVariant='plain'
                 >
                     {playerAssignmentId ? (
@@ -456,7 +483,7 @@ export default function StudentArea({ active }: { active: string }) {
                 <PageCard
                     headerTitle='Your Submissions'
                     headerProps={{ height: 56 }}
-                    headerActions={<HeaderActions actions={[{ key: 'refresh-subs', label: 'Refresh', ariaLabel: 'Refresh submissions', icon: <RefreshIcon fontSize='small' />, onClick: () => window.dispatchEvent(new Event('focus')) }]} />}
+                    headerActions={<HeaderActions actions={[{ key: 'refresh-subs', label: 'Refresh', ariaLabel: 'Refresh submissions', icon: <RefreshIcon fontSize='small' />, onClick: () => { void loadData('manual'); } }]} />}
                     headerActionsVariant='plain'
                 >
                     {playerAssignmentId ? (
