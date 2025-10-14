@@ -13,8 +13,14 @@ export async function GET(req: Request) {
         if (!token) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
         const payload = verifyJwt(token);
         if (!payload) return NextResponse.json({ error: 'invalid token' }, { status: 401 });
-
-        const { rows } = await withInstructorContext(payload.sub, () => query<RosterEntry>(
+        const instructorId = payload.role === 'student' ? (payload.instructorId as string) : payload.sub;
+        if (payload.role === 'student') {
+            // Only allow Teaching Assistants to list roster
+            const meId = payload.sub; // roster id
+            const { rows: me } = await withInstructorContext(instructorId, () => query<{ evaluator: boolean }>(`SELECT evaluator FROM roster WHERE id=$1 AND owner_id = current_setting('app.current_instructor')::uuid LIMIT 1`, [meId]));
+            if (!me.length || !me[0].evaluator) return NextResponse.json({ error: 'forbidden' }, { status: 403 });
+        }
+        const { rows } = await withInstructorContext(instructorId, () => query<RosterEntry>(
             `SELECT id, name, email, status, evaluator FROM roster WHERE owner_id = current_setting('app.current_instructor')::uuid ORDER BY created_at DESC LIMIT 1000`
         ));
         return NextResponse.json(rows);
@@ -31,12 +37,30 @@ export async function POST(req: Request) {
         const payload = verifyJwt(token);
         if (!payload) return NextResponse.json({ error: 'invalid token' }, { status: 401 });
 
+        // Instructors can add; TAs (evaluator students) can also add but not delete/update.
+        let contextInstructorId: string | null = null;
+        if (payload.role === 'instructor') {
+            contextInstructorId = payload.sub;
+        } else if (payload.role === 'student' && payload.instructorId) {
+            // verify TA privilege for this instructor
+            const meId = payload.sub as string;
+            const instructorId = payload.instructorId as string;
+            const { rows: me } = await withInstructorContext(instructorId, () => query<{ evaluator: boolean }>(
+                `SELECT evaluator FROM roster WHERE id=$1 AND owner_id = current_setting('app.current_instructor')::uuid LIMIT 1`,
+                [meId]
+            ));
+            if (!me.length || !me[0].evaluator) return NextResponse.json({ error: 'forbidden' }, { status: 403 });
+            contextInstructorId = instructorId;
+        } else {
+            return NextResponse.json({ error: 'forbidden' }, { status: 403 });
+        }
+
         const body: NewRosterEntry | { entries: NewRosterEntry[] } = await req.json();
         const entries = Array.isArray((body as any).entries) ? (body as any).entries as NewRosterEntry[] : [body as NewRosterEntry];
         if (!entries.length) return NextResponse.json({ error: 'no entries' }, { status: 400 });
 
         const inserted: RosterEntry[] = [];
-        await withInstructorContext(payload.sub, async () => {
+        await withInstructorContext(contextInstructorId!, async () => {
             for (const e of entries) {
                 const name = (e.name || '').trim();
                 const email = (e.email || '').trim();
@@ -66,6 +90,7 @@ export async function DELETE(req: Request) {
         if (!token) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
         const payload = verifyJwt(token);
         if (!payload) return NextResponse.json({ error: 'invalid token' }, { status: 401 });
+        if (payload.role !== 'instructor') return NextResponse.json({ error: 'forbidden' }, { status: 403 });
 
         const url = new URL(req.url);
         let id = url.searchParams.get('id');
@@ -88,6 +113,7 @@ export async function PATCH(req: Request) {
         if (!token) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
         const payload = verifyJwt(token);
         if (!payload) return NextResponse.json({ error: 'invalid token' }, { status: 401 });
+        if (payload.role !== 'instructor') return NextResponse.json({ error: 'forbidden' }, { status: 403 });
 
         const body = await req.json();
         const { id, name, email, status, evaluator } = body || {};

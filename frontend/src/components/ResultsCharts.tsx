@@ -12,10 +12,12 @@ import GradeIcon from '@mui/icons-material/Grade';
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 import { useTheme } from '@mui/material/styles';
+import { useAuth } from '@/features/auth/AuthProvider';
 
 interface ResultsChartsProps { results?: any[]; loadAttemptsFor?: { assignmentId: string; student: string; token?: string }; onAdvancedChange?: (open: boolean) => void; }
 export default function ResultsCharts({ results = [] as any[], loadAttemptsFor, onAdvancedChange }: ResultsChartsProps) {
     const theme = useTheme();
+    const { user } = useAuth();
     const [showAdvanced, setShowAdvanced] = React.useState(false);
     const toggleAdvanced = (val: boolean) => { setShowAdvanced(val); try { onAdvancedChange?.(val); } catch { /* ignore */ } };
     const [attemptAugmented, setAttemptAugmented] = React.useState<any[] | null>(null);
@@ -396,11 +398,15 @@ export default function ResultsCharts({ results = [] as any[], loadAttemptsFor, 
                 </Card>
             </Box>
 
-            <Box>
-                <Tooltip title='Explore detailed progress & rubric evolution'>
-                    <Button variant='outlined' onClick={() => toggleAdvanced(true)}>More Charts</Button>
-                </Tooltip>
-            </Box>
+            {user?.role === 'instructor' && (
+                <Box>
+                    <Tooltip title='Explore detailed progress & rubric evolution'>
+                        <span>
+                            <Button variant='outlined' onClick={() => toggleAdvanced(true)}>More Charts</Button>
+                        </span>
+                    </Tooltip>
+                </Box>
+            )}
 
             {/* Common Incorrect Answers */}
             <Card>

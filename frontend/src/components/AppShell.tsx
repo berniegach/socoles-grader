@@ -1,6 +1,6 @@
 'use client';
 import { useMemo, useState, useEffect } from 'react';
-import { Box, Drawer, Toolbar, AppBar, Typography, IconButton, List, ListItemButton, ListItemIcon, ListItemText, Avatar, Divider } from '@mui/material';
+import { Box, Drawer, Toolbar, AppBar, Typography, IconButton, List, ListItemButton, ListItemIcon, ListItemText, Avatar, Divider, ListSubheader } from '@mui/material';
 import DashboardIcon from '@mui/icons-material/DashboardRounded';
 import MenuBookIcon from '@mui/icons-material/MenuBook';
 import DescriptionIcon from '@mui/icons-material/DescriptionOutlined';
@@ -12,10 +12,12 @@ import RateReviewIcon from '@mui/icons-material/RateReviewOutlined';
 import StorageIcon from '@mui/icons-material/StorageOutlined';
 import LogoutIcon from '@mui/icons-material/Logout';
 
-import { useAuth } from '@/features/auth/AuthProvider';
 import StudentArea from '@/features/student/StudentArea';
 import InstructorArea from '@/features/instructor/InstructorArea';
+import InstructorReviewRequests from '@/features/instructor/InstructorReviewRequests';
+import ClassRoster from '@/features/instructor/ClassRoster';
 import type { Role } from '@/lib/types';
+import { useAuth } from '@/features/auth/AuthProvider';
 
 const drawerWidth = 260;
 type Item = { id: string; label: string; icon: React.ElementType };
@@ -24,7 +26,7 @@ export default function AppShell() {
     const { user, setUser } = useAuth();
     const role = (user?.role || 'student') as Role;
 
-    const items: Item[] = useMemo(
+    const studentItems: Item[] = useMemo(
         () => role === 'student'
             ? [
                 { id: 's-dash', label: 'Dashboard', icon: DashboardIcon },
@@ -32,7 +34,22 @@ export default function AppShell() {
                 { id: 's-submissions', label: 'Submissions', icon: DescriptionIcon },
                 { id: 's-profile', label: 'Profile', icon: GroupIcon },
             ]
-            : [
+            : [],
+        [role]
+    );
+    const taItems: Item[] = useMemo(
+        () => (role === 'student' && user?.evaluator)
+            ? [
+                { id: 'i-reviews', label: 'Reviews', icon: RateReviewIcon },
+                { id: 'i-submissions', label: 'Submissions', icon: DescriptionIcon },
+                { id: 'i-class', label: 'Roster', icon: GroupIcon },
+            ]
+            : [],
+        [role, user?.evaluator]
+    );
+    const instructorItems: Item[] = useMemo(
+        () => role === 'instructor'
+            ? [
                 { id: 'i-dash', label: 'Dashboard', icon: DashboardIcon },
                 { id: 'i-questions', label: 'Questions', icon: AssignmentIcon },
                 { id: 'i-assignments', label: 'Assignments', icon: MenuBookIcon },
@@ -42,11 +59,16 @@ export default function AppShell() {
                 { id: 'i-reviews', label: 'Reviews', icon: RateReviewIcon },
                 { id: 'i-class', label: 'Class', icon: GroupIcon },
                 { id: 'i-settings', label: 'Settings', icon: SettingsIcon },
-            ],
+            ]
+            : [],
         [role]
     );
+    const combinedItems: Item[] = useMemo(
+        () => role === 'student' ? [...studentItems, ...taItems] : instructorItems,
+        [role, studentItems, taItems, instructorItems]
+    );
 
-    const [active, setActive] = useState(items[0].id);
+    const [active, setActive] = useState(combinedItems[0]?.id || (role === 'student' ? 's-dash' : 'i-dash'));
 
     // Allow children to request navigation via a custom event
     useEffect(() => {
@@ -114,7 +136,7 @@ export default function AppShell() {
                 </Box>
                 <Divider />
                 <List sx={{ mt: 1 }}>
-                    {items.map((it) => {
+                    {(role === 'student' ? studentItems : instructorItems).map((it) => {
                         const isActive = active === it.id;
                         return (
                             <ListItemButton
@@ -158,12 +180,55 @@ export default function AppShell() {
                             </ListItemButton>
                         );
                     })}
+                    {role === 'student' && taItems.length > 0 && (
+                        <ListSubheader disableSticky sx={{ mt: 1, mb: 0.5, mx: 1.5, px: 0, fontSize: 12, fontWeight: 700, textTransform: 'uppercase', color: 'text.secondary' }}>
+                            TA tools
+                        </ListSubheader>
+                    )}
+                    {role === 'student' && taItems.map((it) => {
+                        const isActive = active === it.id;
+                        return (
+                            <ListItemButton
+                                key={it.id}
+                                aria-current={isActive ? 'page' : undefined}
+                                onClick={() => { setActive(it.id); sessionStorage.setItem('appshell.active', it.id); }}
+                                sx={{
+                                    position: 'relative',
+                                    borderRadius: 1,
+                                    mx: 1,
+                                    my: 0.25,
+                                    pl: 1.5,
+                                    alignItems: 'center',
+                                    gap: 0.5,
+                                    overflow: 'hidden',
+                                    transition: 'background .2s, transform .15s',
+                                    ...(isActive && { background: 'rgba(255,255,255,0.08)' }),
+                                    '&:hover': { background: isActive ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.06)' },
+                                    '&:before': isActive ? {
+                                        content: '""',
+                                        position: 'absolute',
+                                        left: 0,
+                                        top: 4,
+                                        bottom: 4,
+                                        width: 4,
+                                        borderRadius: 2,
+                                        background: 'linear-gradient(180deg,#4e54c8,#8f94fb)'
+                                    } : undefined
+                                }}
+                            >
+                                <ListItemIcon sx={{ minWidth: 40, color: isActive ? 'secondary.main' : 'text.secondary' }}>
+                                    <it.icon fontSize='small' />
+                                </ListItemIcon>
+                                <ListItemText primaryTypographyProps={{ fontWeight: isActive ? 600 : 500 }} primary={it.label} />
+                            </ListItemButton>
+                        );
+                    })}
                 </List>
                 <Box sx={{ mt: 'auto', p: 2, display: 'flex', alignItems: 'center', gap: 1.25, opacity: 0.9 }}>
                     <Avatar src={role === 'student' ? '/icons/reading-book.png' : '/icons/teacher.png'} alt={role === 'student' ? 'Student' : 'Instructor'} sx={{ width: 36, height: 36, bgcolor: 'secondary.main' }} />
                     <Box sx={{ minWidth: 0 }}>
                         <Typography variant="body2" noWrap sx={{ maxWidth: 140, fontWeight: 600 }}>{user?.name}</Typography>
-                        <Typography variant="caption" color="text.secondary">{role}</Typography>
+                        <Typography variant="caption" color="text.secondary">{role === 'student' ? (user?.evaluator ? 'student • TA' : 'student') : 'instructor'}</Typography>
                     </Box>
                 </Box>
             </Drawer>
@@ -171,7 +236,11 @@ export default function AppShell() {
             <Box component="main" sx={{ flexGrow: 1 }}>
                 <Toolbar />
                 <Box sx={{ maxWidth: 1040, mx: 'auto', px: 3, pt: 2, pb: 5 }}>
-                    {role === 'student' ? <StudentArea active={active} /> : <InstructorArea active={active} />}
+                    {role === 'student'
+                        ? (user?.evaluator && (active === 'i-reviews' || active === 'i-class' || active === 'i-submissions')
+                            ? (active === 'i-reviews' ? <InstructorReviewRequests /> : active === 'i-class' ? <ClassRoster /> : <InstructorArea active="i-submissions" />)
+                            : <StudentArea active={active} />)
+                        : <InstructorArea active={active} />}
                 </Box>
             </Box>
         </Box>

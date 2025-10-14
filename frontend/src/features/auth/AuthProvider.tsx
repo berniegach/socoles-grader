@@ -3,8 +3,8 @@ import { createContext, useContext } from 'react';
 import type { Role } from '@/lib/types';
 
 export type AuthCtx = {
-    user: { name: string; role: Role; token?: string; instructorId?: string } | null;
-    setUser: (u: { name: string; role: Role; token?: string; instructorId?: string } | null) => void;
+    user: { name: string; role: Role; token?: string; instructorId?: string; evaluator?: boolean } | null;
+    setUser: (u: { name: string; role: Role; token?: string; instructorId?: string; evaluator?: boolean } | null) => void;
     authFetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 };
 

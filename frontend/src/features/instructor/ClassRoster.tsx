@@ -14,7 +14,7 @@ import { useAuth } from '@/features/auth/AuthProvider';
 import type { RosterEntry } from '@/lib/types';
 
 export default function ClassRoster() {
-    const { authFetch } = useAuth();
+    const { authFetch, user } = useAuth();
     const [rows, setRows] = useState<RosterEntry[]>([]);
     const [busy, setBusy] = useState(false);
     const [note, setNote] = useState<string>('');
@@ -147,17 +147,38 @@ export default function ClassRoster() {
         }
     }
 
+    async function copyInviteLink(row: RosterEntry) {
+        try {
+            setBusy(true);
+            const res = await authFetch(`/api/invites?rosterId=${encodeURIComponent(row.id)}`);
+            const data = await res.json();
+            if (!res.ok) throw new Error(data?.error || 'Failed to fetch invite');
+            const invite = Array.isArray(data) ? data[0] : data;
+            const link = invite?.link as string | undefined;
+            if (!link) throw new Error('Invite link unavailable');
+            await navigator.clipboard.writeText(link);
+            setNote('Invite link copied to clipboard');
+        } catch (e: any) {
+            setErr(e.message || 'Failed to copy link');
+        } finally {
+            setBusy(false);
+        }
+    }
+
+    const isInstructor = user?.role === 'instructor';
+    const isTA = user?.role === 'student' && !!user?.evaluator;
     const headerActions = (
         <>
             <HeaderActions
                 actions={[
-                    {
+                    // Instructors and TAs can import
+                    ...((isInstructor || isTA) ? [{
                         key: 'import',
                         label: 'Import CSV',
                         ariaLabel: 'Import CSV',
                         icon: <UploadFileIcon fontSize='small' />,
                         onClick: () => { /* trigger hidden input */ inputRef.current?.click(); },
-                    },
+                    }] : []),
                     {
                         key: 'refresh',
                         ariaLabel: 'Refresh roster',
@@ -168,25 +189,27 @@ export default function ClassRoster() {
                     }
                 ]}
             />
-            <input ref={inputRef} hidden accept='.csv' type='file' onChange={onCsv} />
+            {(isInstructor || isTA) && <input ref={inputRef} hidden accept='.csv' type='file' onChange={onCsv} />}
         </>
     );
 
     return (
         <PageCard headerTitle='Class Roster' headerProps={{ height: 56 }} headerActions={headerActions} headerActionsVariant='plain' loadingProgress={busy}>
             <Box sx={{ p: { xs: 1.5, md: 2 } }}>
-                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} alignItems={{ xs: 'stretch', sm: 'flex-end' }} sx={{ mb: 2 }}>
-                    <TextField size="small" label="Full name" value={name} onChange={(e) => setName(e.target.value)} sx={{ flex: 1 }} />
-                    <TextField size="small" label="Email" value={email} onChange={(e) => setEmail(e.target.value)} sx={{ flex: 1 }} />
-                    <Button variant="contained" startIcon={<PersonAddIcon />} onClick={addOne} disabled={busy}>Add</Button>
-                </Stack>
+                {(isInstructor || isTA) && (
+                    <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} alignItems={{ xs: 'stretch', sm: 'flex-end' }} sx={{ mb: 2 }}>
+                        <TextField size="small" label="Full name" value={name} onChange={(e) => setName(e.target.value)} sx={{ flex: 1 }} />
+                        <TextField size="small" label="Email" value={email} onChange={(e) => setEmail(e.target.value)} sx={{ flex: 1 }} />
+                        <Button variant="contained" startIcon={<PersonAddIcon />} onClick={addOne} disabled={busy}>Add</Button>
+                    </Stack>
+                )}
                 <Table size="small">
                     <TableHead>
                         <TableRow>
                             <TableCell>Name</TableCell>
                             <TableCell>Email</TableCell>
                             <TableCell>Status</TableCell>
-                            <TableCell>Privileges</TableCell>
+                            {user?.role === 'instructor' && <TableCell>Privileges</TableCell>}
                             <TableCell align="right">Actions</TableCell>
                         </TableRow>
                     </TableHead>
@@ -203,7 +226,7 @@ export default function ClassRoster() {
                                         variant={r.status === 'Invited' || r.status === 'Pending' ? 'outlined' : 'filled'}
                                     />
                                 </TableCell>
-                                <TableCell>
+                                {user?.role === 'instructor' && <TableCell>
                                     <Tooltip title="Teaching Assistant" arrow>
                                         <FormControlLabel
                                             control={<Switch size="small" checked={!!r.evaluator} onChange={async (_, checked) => {
@@ -223,28 +246,41 @@ export default function ClassRoster() {
                                             label="TA"
                                         />
                                     </Tooltip>
-                                </TableCell>
+                                </TableCell>}
                                 <TableCell align="right">
-                                    {r.status === 'Pending' && (
-                                        <Tooltip title="Create & copy invite link">
-                                            <span>
-                                                <IconButton size="small" color="primary" onClick={() => createInvite(r)} disabled={busy}><LinkIcon fontSize="small" /></IconButton>
-                                            </span>
-                                        </Tooltip>
-                                    )}
-                                    {r.status === 'Invited' && (
-                                        <Tooltip title="Cancel invite">
-                                            <span>
-                                                <IconButton size="small" color="warning" onClick={() => cancelInvite(r)} disabled={busy}><CancelIcon fontSize="small" /></IconButton>
-                                            </span>
-                                        </Tooltip>
-                                    )}
-                                    <IconButton size="small" color="error" onClick={() => remove(r.id)} disabled={busy}><DeleteIcon fontSize="small" /></IconButton>
+                                    {(isInstructor || isTA) ? (
+                                        <>
+                                            {r.status === 'Pending' && (
+                                                <Tooltip title="Create & copy invite link">
+                                                    <span>
+                                                        <IconButton size="small" color="primary" onClick={() => createInvite(r)} disabled={busy}><LinkIcon fontSize="small" /></IconButton>
+                                                    </span>
+                                                </Tooltip>
+                                            )}
+                                            {r.status === 'Invited' && (
+                                                <Tooltip title="Copy invite link">
+                                                    <span>
+                                                        <IconButton size="small" color="secondary" onClick={() => copyInviteLink(r)} disabled={busy}><LinkIcon fontSize="small" /></IconButton>
+                                                    </span>
+                                                </Tooltip>
+                                            )}
+                                            {isInstructor && r.status === 'Invited' && (
+                                                <Tooltip title="Cancel invite">
+                                                    <span>
+                                                        <IconButton size="small" color="warning" onClick={() => cancelInvite(r)} disabled={busy}><CancelIcon fontSize="small" /></IconButton>
+                                                    </span>
+                                                </Tooltip>
+                                            )}
+                                            {isInstructor && (
+                                                <IconButton size="small" color="error" onClick={() => remove(r.id)} disabled={busy}><DeleteIcon fontSize="small" /></IconButton>
+                                            )}
+                                        </>
+                                    ) : null}
                                 </TableCell>
                             </TableRow>
                         ))}
                         {!rows.length && (
-                            <TableRow><TableCell colSpan={4}>No students yet.</TableCell></TableRow>
+                            <TableRow><TableCell colSpan={isInstructor ? 5 : 4}>No students yet.</TableCell></TableRow>
                         )}
                     </TableBody>
                 </Table>

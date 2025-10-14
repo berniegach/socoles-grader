@@ -19,6 +19,15 @@ export async function GET(req: NextRequest) {
         const student = searchParams.get('student');
         const instructorId = payload.role === 'student' ? (payload.instructorId as string) : payload.sub;
         return await withInstructorContext(instructorId, async () => {
+            // Only allow Teaching Assistants (evaluator) to list review requests when role is student
+            if (payload.role === 'student') {
+                const meId = payload.sub as string;
+                const { rows: me } = await query<{ evaluator: boolean }>(
+                    `SELECT evaluator FROM roster WHERE id=$1 AND owner_id = current_setting('app.current_instructor')::uuid LIMIT 1`,
+                    [meId]
+                );
+                if (!me.length || !me[0].evaluator) return NextResponse.json({ error: 'forbidden' }, { status: 403 });
+            }
             const clauses: string[] = [];
             const params: any[] = [];
             function add(c: string, v: any) { params.push(v); clauses.push(`${c}=$${params.length}`); }
@@ -79,6 +88,15 @@ export async function PATCH(req: NextRequest) {
         if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
         const instructorId = payload.role === 'student' ? (payload.instructorId as string) : payload.sub;
         return await withInstructorContext(instructorId, async () => {
+            // Only instructor or TA can update request status/comments
+            if (payload.role === 'student') {
+                const meId = payload.sub as string;
+                const { rows: me } = await query<{ evaluator: boolean }>(
+                    `SELECT evaluator FROM roster WHERE id=$1 AND owner_id = current_setting('app.current_instructor')::uuid LIMIT 1`,
+                    [meId]
+                );
+                if (!me.length || !me[0].evaluator) return NextResponse.json({ error: 'forbidden' }, { status: 403 });
+            }
             const { rows } = await query(`UPDATE question_review_requests SET 
                 status=COALESCE($2,status), 
                 comment=COALESCE($3, comment), 

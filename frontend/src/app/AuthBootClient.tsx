@@ -3,7 +3,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { AuthProvider } from '@/features/auth/AuthProvider';
 
 export function AuthBootClient({ children }: { children: React.ReactNode }) {
-    const [user, setUser] = useState<{ name: string; role: 'instructor' | 'student'; token?: string; instructorId?: string } | null>(() => {
+    const [user, setUser] = useState<{ name: string; role: 'instructor' | 'student'; token?: string; instructorId?: string; evaluator?: boolean } | null>(() => {
         // Synchronous restore so first render already has token
         if (typeof window === 'undefined') return null;
         try {
@@ -56,6 +56,18 @@ export function AuthBootClient({ children }: { children: React.ReactNode }) {
                 if (!res.ok) {
                     console.warn('[AuthBootClient] token rejected, clearing');
                     logout();
+                }
+                // For students, also fetch self to get evaluator flag and augment auth context
+                if (user.role === 'student') {
+                    try {
+                        const me = await fetch('/api/student/me', { headers: { Authorization: `Bearer ${user.token}` } });
+                        if (me.ok) {
+                            const info = await me.json();
+                            if (info && typeof info.evaluator === 'boolean') {
+                                setUser(prev => prev ? { ...prev, evaluator: info.evaluator } : prev);
+                            }
+                        }
+                    } catch { /* ignore */ }
                 }
             } catch {
                 // network errors ignored for now

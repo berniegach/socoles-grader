@@ -283,38 +283,40 @@ export default function SubmissionReview() {
                                                 <TableCell>{formatGrade((s as any).grade)}</TableCell>
                                                 <TableCell>{s.status}</TableCell>
                                                 <TableCell>
-                                                    <Button size='small' sx={{ ml: 0 }} variant='contained' disabled={gradingSub[s.id]?.status === 'loading'} onClick={async (e) => {
-                                                        e.stopPropagation();
-                                                        setGradingSub(m => ({ ...m, [s.id]: { status: 'loading', message: 'Starting grader…' } }));
-                                                        try {
-                                                            const start = await authFetch('/api/grade-submission', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ submissionId: s.id, async: true }) });
-                                                            if (!start.ok) throw new Error('Failed to start grading');
-                                                            const started = await start.json();
-                                                            const jobId: string | undefined = started?.jobId;
-                                                            if (!jobId) throw new Error('No job id');
-                                                            const deadline = Date.now() + 120_000;
-                                                            let final: any = null;
-                                                            while (Date.now() < deadline) {
-                                                                await new Promise(r => setTimeout(r, 1000));
-                                                                const poll = await authFetch(`/api/grade-submission?job=${encodeURIComponent(jobId)}`);
-                                                                if (!poll.ok) continue;
-                                                                const body = await poll.json();
-                                                                if (body.status === 'succeeded') { final = body.result; break; }
-                                                                if (body.status === 'failed') { throw new Error(body.error || 'Grading failed'); }
-                                                                setGradingSub(m => ({ ...m, [s.id]: { status: 'loading', message: 'Grading in progress…' } }));
+                                                    {user?.role === 'instructor' && (
+                                                        <Button size='small' sx={{ ml: 0 }} variant='contained' disabled={gradingSub[s.id]?.status === 'loading'} onClick={async (e) => {
+                                                            e.stopPropagation();
+                                                            setGradingSub(m => ({ ...m, [s.id]: { status: 'loading', message: 'Starting grader…' } }));
+                                                            try {
+                                                                const start = await authFetch('/api/grade-submission', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ submissionId: s.id, async: true }) });
+                                                                if (!start.ok) throw new Error('Failed to start grading');
+                                                                const started = await start.json();
+                                                                const jobId: string | undefined = started?.jobId;
+                                                                if (!jobId) throw new Error('No job id');
+                                                                const deadline = Date.now() + 120_000;
+                                                                let final: any = null;
+                                                                while (Date.now() < deadline) {
+                                                                    await new Promise(r => setTimeout(r, 1000));
+                                                                    const poll = await authFetch(`/api/grade-submission?job=${encodeURIComponent(jobId)}`);
+                                                                    if (!poll.ok) continue;
+                                                                    const body = await poll.json();
+                                                                    if (body.status === 'succeeded') { final = body.result; break; }
+                                                                    if (body.status === 'failed') { throw new Error(body.error || 'Grading failed'); }
+                                                                    setGradingSub(m => ({ ...m, [s.id]: { status: 'loading', message: 'Grading in progress…' } }));
+                                                                }
+                                                                if (!final) {
+                                                                    setGradingSub(m => ({ ...m, [s.id]: { status: 'success', message: 'Still processing in background…' } }));
+                                                                    return;
+                                                                }
+                                                                setRows(r => r.map(row => row.id === s.id ? { ...row, grade: (final as any)?.submission?.grade, status: (final as any)?.status || (row as any).status } as any : row));
+                                                                await loadQuestions(s.id);
+                                                                setGradingSub(m => ({ ...m, [s.id]: { status: 'success', message: (final as any)?.status === 'Needs review' ? 'Completed with issues.' : 'Auto-grading complete.' } }));
+                                                            } catch (e: any) {
+                                                                setGradingSub(m => ({ ...m, [s.id]: { status: 'error', message: e?.message || 'Failed' } }));
                                                             }
-                                                            if (!final) {
-                                                                setGradingSub(m => ({ ...m, [s.id]: { status: 'success', message: 'Still processing in background…' } }));
-                                                                return;
-                                                            }
-                                                            setRows(r => r.map(row => row.id === s.id ? { ...row, grade: (final as any)?.submission?.grade, status: (final as any)?.status || (row as any).status } as any : row));
-                                                            await loadQuestions(s.id);
-                                                            setGradingSub(m => ({ ...m, [s.id]: { status: 'success', message: (final as any)?.status === 'Needs review' ? 'Completed with issues.' : 'Auto-grading complete.' } }));
-                                                        } catch (e: any) {
-                                                            setGradingSub(m => ({ ...m, [s.id]: { status: 'error', message: e?.message || 'Failed' } }));
-                                                        }
-                                                    }}>Auto-Grade</Button>
-                                                    {gradingSub[s.id]?.status !== 'idle' && <Typography variant='caption' color={gradingSub[s.id]?.status === 'error' ? 'error' : 'text.secondary'} sx={{ ml: 1 }}>{gradingSub[s.id]?.message}</Typography>}
+                                                        }}>Auto-Grade</Button>
+                                                    )}
+                                                    {user?.role === 'instructor' && gradingSub[s.id]?.status !== 'idle' && <Typography variant='caption' color={gradingSub[s.id]?.status === 'error' ? 'error' : 'text.secondary'} sx={{ ml: 1 }}>{gradingSub[s.id]?.message}</Typography>}
                                                 </TableCell>
                                             </TableRow>
                                         ))}

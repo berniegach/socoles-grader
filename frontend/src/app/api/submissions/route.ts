@@ -14,7 +14,14 @@ export async function GET(req: NextRequest) {
         const payload = verifyJwt(token);
         if (!payload) return NextResponse.json({ error: 'invalid token' }, { status: 401 });
         const instructorId = payload.role === 'student' ? (payload.instructorId as string) : payload.sub;
-        const meEmail = payload.role === 'student' ? payload.email : undefined;
+        // If student is a TA (evaluator), allow listing all submissions; else restrict to own
+        let meEmail: string | undefined = undefined;
+        if (payload.role === 'student') {
+            const meId = payload.sub as string;
+            const me = await withInstructorContext(instructorId, () => query<{ evaluator: boolean }>(`SELECT evaluator FROM roster WHERE id=$1 AND owner_id = current_setting('app.current_instructor')::uuid LIMIT 1`, [meId]));
+            const isTA = !!me.rows[0]?.evaluator;
+            meEmail = isTA ? undefined : payload.email;
+        }
         const { rows } = await withInstructorContext(instructorId, () => query(`
             SELECT id, student, assignment_id as "assignmentId", date, grade::float8 as grade, status
                         FROM submissions

@@ -21,10 +21,55 @@ export async function GET(req: NextRequest) {
         if (!token) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
         const payload = verifyJwt(token);
         if (!payload) return NextResponse.json({ error: 'invalid token' }, { status: 401 });
-        const { rows } = await withInstructorContext(payload.sub, () => query<any>(
-            `SELECT i.id, i.roster_id as "rosterId", i.token, i.email, i.name, i.expires_at as "expiresAt", i.used_at as "usedAt" 
-       FROM invites i WHERE i.owner_id = current_setting('app.current_instructor')::uuid ORDER BY i.created_at DESC LIMIT 200`
-        ));
+
+        // Determine instructor context and allow TA access if evaluator
+        const url = new URL(req.url);
+        const rosterId = url.searchParams.get('rosterId');
+        let contextInstructorId: string | null = null;
+        if (payload.role === 'instructor') {
+            contextInstructorId = payload.sub;
+        } else if (payload.role === 'student' && payload.instructorId) {
+            const instructorId = String(payload.instructorId);
+            const meId = String(payload.sub);
+            const { rows: me } = await withInstructorContext(instructorId, () => query<{ evaluator: boolean }>(
+                `SELECT evaluator FROM roster WHERE id=$1 AND owner_id = current_setting('app.current_instructor')::uuid LIMIT 1`,
+                [meId]
+            ));
+            if (!me.length || !me[0].evaluator) return NextResponse.json({ error: 'forbidden' }, { status: 403 });
+            contextInstructorId = instructorId;
+        } else {
+            return NextResponse.json({ error: 'forbidden' }, { status: 403 });
+        }
+
+        const rows = await withInstructorContext(contextInstructorId!, async () => {
+            if (rosterId) {
+                // Return only the most recent active invite for this roster (unused and unexpired preferred; allow expired if none)
+                const active = await query<any>(
+                    `SELECT i.id, i.roster_id as "rosterId", i.token, i.email, i.name, i.expires_at as "expiresAt", i.used_at as "usedAt"
+                     FROM invites i
+                     WHERE i.owner_id = current_setting('app.current_instructor')::uuid AND i.roster_id=$1 AND i.used_at IS NULL
+                     ORDER BY i.created_at DESC
+                     LIMIT 1`,
+                    [rosterId]
+                );
+                if (active.rows.length) return active.rows;
+                const anyLast = await query<any>(
+                    `SELECT i.id, i.roster_id as "rosterId", i.token, i.email, i.name, i.expires_at as "expiresAt", i.used_at as "usedAt"
+                     FROM invites i
+                     WHERE i.owner_id = current_setting('app.current_instructor')::uuid AND i.roster_id=$1
+                     ORDER BY i.created_at DESC
+                     LIMIT 1`,
+                    [rosterId]
+                );
+                return anyLast.rows;
+            } else {
+                const all = await query<any>(
+                    `SELECT i.id, i.roster_id as "rosterId", i.token, i.email, i.name, i.expires_at as "expiresAt", i.used_at as "usedAt" 
+                     FROM invites i WHERE i.owner_id = current_setting('app.current_instructor')::uuid ORDER BY i.created_at DESC LIMIT 200`
+                );
+                return all.rows;
+            }
+        });
         const list: InviteResponse[] = rows.map((r: any) => ({ ...r, link: makeLink(r.token, req) }));
         return NextResponse.json(list);
     } catch (e: any) {
@@ -44,8 +89,27 @@ export async function POST(req: NextRequest) {
         const { rosterId, email, name, expiresInDays } = body || {};
         if (!rosterId || !email || !name) return NextResponse.json({ error: 'rosterId, email, name required' }, { status: 400 });
 
+        // Determine instructor context. Instructors can create invites directly.
+        // TAs (student role with evaluator=true) can create invites under their instructor.
+        let contextInstructorId: string | null = null;
+        if (payload.role === 'instructor') {
+            contextInstructorId = payload.sub;
+        } else if (payload.role === 'student' && payload.instructorId) {
+            const instructorId = String(payload.instructorId);
+            const meId = String(payload.sub);
+            // Verify the caller is a TA for this instructor
+            const { rows: me } = await withInstructorContext(instructorId, () => query<{ evaluator: boolean }>(
+                `SELECT evaluator FROM roster WHERE id=$1 AND owner_id = current_setting('app.current_instructor')::uuid LIMIT 1`,
+                [meId]
+            ));
+            if (!me.length || !me[0].evaluator) return NextResponse.json({ error: 'forbidden' }, { status: 403 });
+            contextInstructorId = instructorId;
+        } else {
+            return NextResponse.json({ error: 'forbidden' }, { status: 403 });
+        }
+
         const exp = Number(expiresInDays) > 0 ? Number(expiresInDays) : 14;
-        const rows = await withInstructorContext(payload.sub, async () => {
+        const rows = await withInstructorContext(contextInstructorId!, async () => {
             // ensure roster row belongs to instructor and get its status
             const r = await query<{ id: string; status: string }>(`SELECT id, status FROM roster WHERE id=$1 AND owner_id = current_setting('app.current_instructor')::uuid`, [rosterId]);
             if (!r.rows.length) throw new Error('Roster entry not found');
