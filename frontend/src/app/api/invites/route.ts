@@ -9,6 +9,19 @@ let initialized = false;
 async function ensureInit() { if (!initialized) { await initSchema(); initialized = true; } }
 
 function makeLink(token: string, req: NextRequest) {
+    // 1) Explicit override from env 
+    const explicit = process.env.INVITE_BASE_URL || process.env.NEXT_PUBLIC_SITE_URL || process.env.SITE_URL;
+    if (explicit) {
+        const base = String(explicit).replace(/\/$/, '');
+        return `${base}/invite/${encodeURIComponent(token)}`;
+    }
+    // 2) Respect proxy headers if present
+    const xfProto = req.headers.get('x-forwarded-proto');
+    const xfHost = req.headers.get('x-forwarded-host') || req.headers.get('host');
+    if (xfProto && xfHost) {
+        return `${xfProto}://${xfHost}/invite/${encodeURIComponent(token)}`;
+    }
+    // 3) Fallback to the request URL origin
     const url = new URL(req.url);
     const base = `${url.protocol}//${url.host}`;
     return `${base}/invite/${encodeURIComponent(token)}`;
