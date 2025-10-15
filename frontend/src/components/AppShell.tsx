@@ -1,6 +1,6 @@
 'use client';
-import { useMemo, useState, useEffect } from 'react';
-import { Box, Drawer, Toolbar, AppBar, Typography, IconButton, List, ListItemButton, ListItemIcon, ListItemText, Avatar, Divider, ListSubheader } from '@mui/material';
+import { useMemo, useState, useEffect, useRef } from 'react';
+import { Box, Drawer, Toolbar, AppBar, Typography, IconButton, List, ListItemButton, ListItemIcon, ListItemText, Avatar, Divider, ListSubheader, Chip } from '@mui/material';
 import DashboardIcon from '@mui/icons-material/DashboardRounded';
 import MenuBookIcon from '@mui/icons-material/MenuBook';
 import DescriptionIcon from '@mui/icons-material/DescriptionOutlined';
@@ -23,7 +23,7 @@ const drawerWidth = 260;
 type Item = { id: string; label: string; icon: React.ElementType };
 
 export default function AppShell() {
-    const { user, setUser } = useAuth();
+    const { user, setUser, authFetch } = useAuth();
     const role = (user?.role || 'student') as Role;
 
     const studentItems: Item[] = useMemo(
@@ -69,6 +69,27 @@ export default function AppShell() {
     );
 
     const [active, setActive] = useState(combinedItems[0]?.id || (role === 'student' ? 's-dash' : 'i-dash'));
+    const [pendingCount, setPendingCount] = useState<number>(0);
+    const pollRef = useRef<any>(null);
+
+    // Poll pending review requests count for instructors and TAs
+    useEffect(() => {
+        const eligible = role === 'instructor' || (role === 'student' && user?.evaluator);
+        if (!eligible) { setPendingCount(0); if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; } return; }
+        async function fetchCount() {
+            try {
+                const res = await authFetch('/api/review-requests?status=Pending');
+                if (res.ok) {
+                    const arr = await res.json();
+                    setPendingCount(Array.isArray(arr) ? arr.length : 0);
+                }
+            } catch { /* ignore */ }
+        }
+        // initial load and start polling
+        void fetchCount();
+        if (!pollRef.current) pollRef.current = setInterval(fetchCount, 8000);
+        return () => { if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; } };
+    }, [role, user?.evaluator, authFetch]);
 
     // Allow children to request navigation via a custom event
     useEffect(() => {
@@ -177,6 +198,11 @@ export default function AppShell() {
                                     <it.icon fontSize='small' />
                                 </ListItemIcon>
                                 <ListItemText primaryTypographyProps={{ fontWeight: isActive ? 600 : 500 }} primary={it.label} />
+                                {it.id === 'i-reviews' && pendingCount > 0 && (
+                                    <Box component="span" sx={{ ml: 'auto', mr: .5 }}>
+                                        <Chip size='small' color='warning' label={pendingCount > 99 ? '99+' : String(pendingCount)} sx={{ height: 20 }} />
+                                    </Box>
+                                )}
                             </ListItemButton>
                         );
                     })}
@@ -220,6 +246,11 @@ export default function AppShell() {
                                     <it.icon fontSize='small' />
                                 </ListItemIcon>
                                 <ListItemText primaryTypographyProps={{ fontWeight: isActive ? 600 : 500 }} primary={it.label} />
+                                {it.id === 'i-reviews' && pendingCount > 0 && (
+                                    <Box component="span" sx={{ ml: 'auto', mr: .5 }}>
+                                        <Chip size='small' color='warning' label={pendingCount > 99 ? '99+' : String(pendingCount)} sx={{ height: 20 }} />
+                                    </Box>
+                                )}
                             </ListItemButton>
                         );
                     })}

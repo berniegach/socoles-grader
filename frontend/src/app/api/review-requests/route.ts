@@ -25,11 +25,22 @@ export async function GET(req: NextRequest) {
             if (assignmentId) add('assignment_id', assignmentId);
             if (questionId) add('question_id', questionId);
             if (submissionId) add('submission_id', submissionId);
-            // If caller is a student, restrict to their own requests (support historical values: id/name/email)
+            const status = searchParams.get('status');
+            if (status) add('status', status);
             if (payload.role === 'student') {
-                const allowed = [payload.sub, payload.name, payload.email].filter(Boolean);
-                params.push(allowed);
-                clauses.push(`student = ANY($${params.length}::text[])`);
+                // Check if this student is a TA/evaluator; evaluators can view all requests
+                const meId = payload.sub as string;
+                const { rows: me } = await query<{ evaluator: boolean }>(
+                    `SELECT evaluator FROM roster WHERE id=$1 AND owner_id = current_setting('app.current_instructor')::uuid LIMIT 1`,
+                    [meId]
+                );
+                const isTA = !!(me.length && me[0].evaluator);
+                if (!isTA) {
+                    // Non-evaluator students can only see their own requests (support id/name/email)
+                    const allowed = [payload.sub, payload.name, payload.email].filter(Boolean);
+                    params.push(allowed);
+                    clauses.push(`student = ANY($${params.length}::text[])`);
+                }
             } else if (student) {
                 // Instructors can optionally filter by student
                 add('student', student);
