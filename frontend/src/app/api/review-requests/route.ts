@@ -19,22 +19,21 @@ export async function GET(req: NextRequest) {
         const student = searchParams.get('student');
         const instructorId = payload.role === 'student' ? (payload.instructorId as string) : payload.sub;
         return await withInstructorContext(instructorId, async () => {
-            // Only allow Teaching Assistants (evaluator) to list review requests when role is student
-            if (payload.role === 'student') {
-                const meId = payload.sub as string;
-                const { rows: me } = await query<{ evaluator: boolean }>(
-                    `SELECT evaluator FROM roster WHERE id=$1 AND owner_id = current_setting('app.current_instructor')::uuid LIMIT 1`,
-                    [meId]
-                );
-                if (!me.length || !me[0].evaluator) return NextResponse.json({ error: 'forbidden' }, { status: 403 });
-            }
             const clauses: string[] = [];
             const params: any[] = [];
             function add(c: string, v: any) { params.push(v); clauses.push(`${c}=$${params.length}`); }
             if (assignmentId) add('assignment_id', assignmentId);
             if (questionId) add('question_id', questionId);
             if (submissionId) add('submission_id', submissionId);
-            if (student) add('student', student);
+            // If caller is a student, restrict to their own requests (support historical values: id/name/email)
+            if (payload.role === 'student') {
+                const allowed = [payload.sub, payload.name, payload.email].filter(Boolean);
+                params.push(allowed);
+                clauses.push(`student = ANY($${params.length}::text[])`);
+            } else if (student) {
+                // Instructors can optionally filter by student
+                add('student', student);
+            }
             const where = clauses.length ? 'WHERE ' + clauses.join(' AND ') + ' AND owner_id = current_setting(\'app.current_instructor\')::uuid' : 'WHERE owner_id = current_setting(\'app.current_instructor\')::uuid';
             const { rows } = await query(`SELECT id, assignment_id as "assignmentId", question_id as "questionId", submission_id as "submissionId", student, comment, status, instructor_reply as "instructorReply", to_char(reply_at,'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as "replyAt", to_char(created_at,'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as "createdAt", to_char(updated_at,'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as "updatedAt" FROM question_review_requests ${where} ORDER BY created_at DESC`, params);
             return NextResponse.json(rows);
