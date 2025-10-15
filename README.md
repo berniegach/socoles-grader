@@ -45,7 +45,7 @@ SOCOLES is a C++ powered SQL auto-grader with a JavaScript frontend
 
 ## 🐳 Docker Quick Start
 
-This is the easiest way to get SOCOLES up and running, with PostgreSQL, backend, and frontend all in Docker containers. Make sure you have Dcoker installed.
+This is the easiest way to get SOCOLES up and running, with PostgreSQL, backend, and frontend all in Docker containers. Make sure you have Docker installed.
 
 ### 1. Clone the repo
 ```bash
@@ -53,21 +53,55 @@ git clone https://github.com/berniegach/socoles-grader.git
 cd socoles-grader
 ```
 
-### 2. Create a .env file 
-Create a file named `.env` in the project root containing only your chosen PostgreSQL password.
+### 2. Configure environment (.env)
+Copy `.env.example` to `.env` and edit as needed.
 
-Example:
+Minimum required for local development:
 ```bash
-echo "POSTGRES_PASSWORD=change-me-strong" > .env
+POSTGRES_PASSWORD=change-me-strong
+# (optional) defaults already work for localhost
+CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+NEXT_PUBLIC_SOCOLES_API_URL=http://localhost:5000
 ```
 
-### 3. Build and start everything
+For a custom HTTPS domain:
 ```bash
-docker compose build 
+POSTGRES_PASSWORD=your-strong-password
+CORS_ORIGINS=https://socoles.example.edu
+NEXT_PUBLIC_SOCOLES_API_URL=https://socoles.example.edu
+# Internal service URL usually stays as-is for Docker:
+SOCOLES_INTERNAL_API_URL=http://backend:5000
+```
+
+Notes:
+- `NEXT_PUBLIC_SOCOLES_GRADE_PATH` is fixed to `/grade-queries` in `docker-compose.yml` (no need to set it).
+- Frontend DB env (PGHOST/PGPORT/PGUSER/PGDATABASE) are defined in `docker-compose.yml` and do not need to be set in `.env`.
+
+### 3. Start everything
+```bash
+docker compose up -d
+```
+
+Optional: build images locally instead of pulling prebuilt ones (uncomment the `build:` sections in `docker-compose.yml` first):
+```bash
+docker compose build
 docker compose up -d
 ```
 
 You can now access the webapp at http://localhost:3000
+
+## 🔧 Configure for your own domain
+
+Set these in `.env` then restart with `docker compose up -d`:
+
+- `POSTGRES_PASSWORD` (required)
+- `CORS_ORIGINS` (comma-separated, no spaces): e.g., `https://socoles.theorg.cs`
+- `NEXT_PUBLIC_SOCOLES_API_URL` (what the browser calls): e.g., `https://socoles.theorg.cs`
+- `SOCOLES_INTERNAL_API_URL` (server-to-server inside Docker): usually `http://backend:5000`
+
+Backend extras:
+- `PORT` (default `5000`)
+
 
 
 ## 🚀 Manual Quick Start

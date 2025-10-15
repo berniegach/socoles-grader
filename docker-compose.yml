@@ -35,7 +35,7 @@ services:
       - .env
     environment:
       - PORT=5000
-      - CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+      - CORS_ORIGINS=${CORS_ORIGINS}
       # Backend connects to secondary grader DB
       - PGHOST=db
       - PGPORT=5432
@@ -62,9 +62,9 @@ services:
     env_file:
       - .env
     environment:
-      - NEXT_PUBLIC_SOCOLES_API_URL=http://localhost:5000
+      - NEXT_PUBLIC_SOCOLES_API_URL=${NEXT_PUBLIC_SOCOLES_API_URL:-http://localhost:5000}
       - NEXT_PUBLIC_SOCOLES_GRADE_PATH=/grade-queries
-      - SOCOLES_INTERNAL_API_URL=http://backend:5000
+      - SOCOLES_INTERNAL_API_URL=${SOCOLES_INTERNAL_API_URL:-http://backend:5000}
       # Frontend uses primary DB (manageclass)
       - PGHOST=db
       - PGPORT=5432
