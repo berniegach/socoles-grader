@@ -5,7 +5,7 @@ export interface GradeResponse { grade: number; feedback: string[]; rubric: Rubr
 export interface Instructor { id: string; email: string; name: string; createdAt: string }
 export interface CourseInstance { id: string; ownerId: string; title: string; code: string; term?: string; createdAt: string }
 
-export interface Assignment { id: string; title: string; course: string; difficulty: string; points: number; due: string; tags: string[]; attemptsAllowed: number; ownerId?: string; courseInstanceId?: string }
+export interface Assignment { id: string; title: string; course: string; difficulty: string; points: number; due: string; tags: string[]; attemptsAllowed: number; published: boolean; ownerId?: string; courseInstanceId?: string }
 export interface Question { id: string; title: string; difficulty: string; status: string; attempts: number; maxPoints: number; dataset?: string; prompt?: string; modelSql?: string; hints?: string; modelQueries?: string[]; initSql?: string; useDefaultGrading?: boolean; gradingOptions?: GradingOptions; ownerId?: string }
 export interface Submission { id: string; student: string; assignmentId: string; date: string; grade: number; status: string }
 // Lightweight user info used in API responses (avoid exposing token/types)
@@ -13,7 +13,7 @@ export interface UserLite { id: string; name: string; email: string; role: Role 
 // Dataset entity
 export interface Dataset { id: string; name: string; sql: string; createdAt?: string; updatedAt?: string }
 // Assignment PATCH payload convenience
-export interface AssignmentPatch { id: string; title?: string; course?: string; points?: number; due?: string; difficulty?: string; tags?: string[]; attemptsAllowed?: number }
+export interface AssignmentPatch { id: string; title?: string; course?: string; points?: number; due?: string; difficulty?: string; tags?: string[]; attemptsAllowed?: number; published?: boolean }
 // Rich question detail (adds optional loaded fields)
 export interface QuestionDetail extends Question { createdAt?: string; updatedAt?: string; publishedAt?: string }
 // Submission record with related questions (flattened)
@@ -31,7 +31,7 @@ export interface AssignmentWithQuestions extends Assignment {
     }>
 }
 
-export interface NewAssignmentPayload { title: string; course: string; difficulty: string; points: number; due: string; tags: string[]; attemptsAllowed: number }
+export interface NewAssignmentPayload { title: string; course: string; difficulty: string; points: number; due: string; tags: string[]; attemptsAllowed: number; published?: boolean }
 export interface NewSubmissionPayload { student: string; assignment: string; date?: string; grade?: number; status?: string }
 
 // Options used by the instructor BatchGrader before running grading

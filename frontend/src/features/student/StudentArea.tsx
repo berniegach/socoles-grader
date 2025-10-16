@@ -23,7 +23,7 @@ import PageCard from '@/components/PageCard';
 import HeaderActions from '@/components/HeaderActions';
 import RefreshIcon from '@mui/icons-material/Refresh';
 
-interface AssignmentApi { id: string; title: string; course: string; difficulty: string; points: number; due: string; tags: string[]; questions?: { id: string }[] }
+interface AssignmentApi { id: string; title: string; course: string; difficulty: string; points: number; due: string; tags: string[]; questions?: { id: string }[]; published?: boolean }
 interface SubmissionApi { id: string; student: string; assignmentId: string; date: string; grade: number; status: string }
 
 type Tone = 'primary' | 'secondary' | 'success' | 'info' | 'warning' | 'error';

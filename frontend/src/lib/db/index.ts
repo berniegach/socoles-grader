@@ -115,9 +115,12 @@ export async function initSchema() {
     due TEXT NOT NULL,
     tags TEXT[] NOT NULL DEFAULT '{}',
     attempts_allowed INT NOT NULL DEFAULT 3 CHECK (attempts_allowed >= 1),
+    published BOOLEAN NOT NULL DEFAULT false,
     owner_id UUID REFERENCES instructors(id) ON DELETE CASCADE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
   );`);
+
+  await query(`ALTER TABLE assignments ADD COLUMN IF NOT EXISTS published BOOLEAN NOT NULL DEFAULT false;`);
 
   await query(`CREATE TABLE IF NOT EXISTS submissions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

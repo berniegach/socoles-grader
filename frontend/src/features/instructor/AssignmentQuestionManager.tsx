@@ -17,6 +17,8 @@ import {
     DialogContent,
     DialogActions,
     LinearProgress,
+    FormControlLabel,
+    Switch,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import RefreshIcon from '@mui/icons-material/Refresh';
@@ -34,6 +36,8 @@ import MoreVertIcon from '@mui/icons-material/MoreVert';
 import PreviewIcon from '@mui/icons-material/Visibility';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteForeverIcon from '@mui/icons-material/DeleteForever';
+import PublishIcon from '@mui/icons-material/Publish';
+import UnpublishedIcon from '@mui/icons-material/Unpublished';
 import Menu from '@mui/material/Menu';
 import PageCard from '@/components/PageCard';
 import TileCard from '@/components/TileCard';
@@ -82,6 +86,7 @@ export default function AssignmentQuestionManager() {
     const [tags, setTags] = useState('');
     const [filter, setFilter] = useState('');
     const [attemptsAllowed, setAttemptsAllowed] = useState<number>(3);
+    const [published, setPublished] = useState(false);
 
     const selected = useMemo<Assignment | AssignmentWithQuestions | null>(() => assignments.find(a => a.id === selectedId) || null, [assignments, selectedId]);
     const [pickerMode, setPickerMode] = useState(false);
@@ -113,6 +118,7 @@ export default function AssignmentQuestionManager() {
             due: due || '',
             tags: tags.split(',').map(t => t.trim()).filter(Boolean),
             attemptsAllowed: Math.max(1, Math.floor(Number(attemptsAllowed) || 1)),
+            published,
         };
         if (!payload.title) { setError('Title required'); setCreating(false); return; }
         try {
@@ -125,7 +131,7 @@ export default function AssignmentQuestionManager() {
             const a = await res.json();
             setAssignments(prev => [a, ...prev]);
             setSelectedId(a.id);
-            setTitle(''); setTags(''); setPoints(0); setDue(''); setAttemptsAllowed(3);
+            setTitle(''); setTags(''); setPoints(0); setDue(''); setAttemptsAllowed(3); setPublished(false);
             setNote('Assignment created');
             setView('list');
         } catch (e: any) { setError(e.message); } finally { setCreating(false); }
@@ -148,6 +154,7 @@ export default function AssignmentQuestionManager() {
         setDue('');
         setTags('');
         setAttemptsAllowed(3);
+        setPublished(false);
         setError(null);
         setSelectedId(null);
         setView('editor');
@@ -161,6 +168,7 @@ export default function AssignmentQuestionManager() {
         setDue(a.due || '');
         setTags((a.tags || []).join(', '));
         setAttemptsAllowed((a as any).attemptsAllowed ?? 3);
+        setPublished(!!(a as any).published);
         setError(null);
         setSelectedId(null);
         setView('editor');
@@ -180,7 +188,8 @@ export default function AssignmentQuestionManager() {
                     difficulty: difficulty || 'Beginner',
                     tags: tags.split(',').map(t => t.trim()).filter(Boolean),
                     course: course || 'Course',
-                    attemptsAllowed: Math.max(1, Math.floor(Number(attemptsAllowed) || 1))
+                    attemptsAllowed: Math.max(1, Math.floor(Number(attemptsAllowed) || 1)),
+                    published
                 })
             });
             if (!res.ok) {
@@ -207,6 +216,27 @@ export default function AssignmentQuestionManager() {
             if (selectedId === id) setSelectedId(null);
             setNote('Deleted');
         } catch (e: any) { setError(e.message); }
+    }
+
+    async function togglePublishedState(target: Assignment, next: boolean) {
+        try {
+            if (!user?.token) throw new Error('Not authenticated');
+            setError(null);
+            const res = await authFetch('/api/assignments', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: target.id, published: next })
+            });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                throw new Error(err?.error || 'Failed to update publish state');
+            }
+            const updated = await res.json();
+            setAssignments(list => list.map(a => a.id === updated.id ? updated : a));
+            setNote(updated.published ? 'Assignment published' : 'Assignment unpublished');
+        } catch (e: any) {
+            setError(e.message);
+        }
     }
 
     const dueDayjs: Dayjs | null = due ? dayjs(due, 'DD-MM-YYYY') : null;
@@ -269,6 +299,7 @@ export default function AssignmentQuestionManager() {
     );
 
     const pageTitle = pickerMode ? `Assignment Questions${selected ? ': ' + selected.title : ''}` : (view === 'editor' ? (editingId ? 'Edit Assignment' : 'Create Assignment') : 'Assignments');
+    const actionTarget = useMemo(() => assignments.find(a => a.id === actionTargetId) || null, [actionTargetId, assignments]);
 
     return (
         <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale='en-gb'>
@@ -293,6 +324,11 @@ export default function AssignmentQuestionManager() {
                             <TextField label='Tags (comma)' value={tags} onChange={e => setTags(e.target.value)} variant='outlined' size='small' />
                             <TextField label='Attempts allowed' type='number' value={attemptsAllowed} onChange={e => setAttemptsAllowed(Math.max(1, Math.floor(Number(e.target.value) || 1)))} variant='outlined' size='small' inputProps={{ min: 1, step: 1 }} />
                         </Box>
+                        <FormControlLabel
+                            control={<Switch checked={published} onChange={(_, v) => setPublished(v)} size='small' />}
+                            label={published ? 'Published' : 'Draft'}
+                            sx={{ mt: 1 }}
+                        />
                         {error && <Typography variant='caption' color='error' sx={{ mt: 1, display: 'block' }}>{error}</Typography>}
                         <Box sx={{ mt: 2, display: 'flex', justifyContent: 'flex-end', gap: 1, flexWrap: 'wrap' }}>
                             <Button variant='outlined' size='small' onClick={() => { setEditingId(null); setView('list'); }}>Cancel</Button>
@@ -324,6 +360,7 @@ export default function AssignmentQuestionManager() {
                                         title={a.title}
                                         subtitle={a.course}
                                         chips={[
+                                            <Chip key="published" size="small" label={a.published ? 'Published' : 'Draft'} color={a.published ? 'success' : 'default'} variant={a.published ? 'filled' : 'outlined'} />,
                                             <DifficultyChip key="difficulty" value={a.difficulty} />,
                                             <Chip key="points" size="small" label={`${a.points} pts`} variant="outlined" />,
                                             <Chip key="attempts" size="small" label={`Attempts: ${(a as any).attemptsAllowed ?? 3}`} variant="outlined" />,
@@ -357,9 +394,17 @@ export default function AssignmentQuestionManager() {
                         >
                             <MenuItem
                                 onClick={() => {
-                                    const target = assignments.find(a => a.id === actionTargetId);
                                     closeActions();
-                                    if (target) openAssignmentPreview(target);
+                                    if (actionTarget) togglePublishedState(actionTarget, !actionTarget.published);
+                                }}
+                            >
+                                <ListItemIcon>{actionTarget?.published ? <UnpublishedIcon fontSize='small' /> : <PublishIcon fontSize='small' />}</ListItemIcon>
+                                <ListItemText>{actionTarget?.published ? 'Unpublish' : 'Publish'}</ListItemText>
+                            </MenuItem>
+                            <MenuItem
+                                onClick={() => {
+                                    closeActions();
+                                    if (actionTarget) openAssignmentPreview(actionTarget);
                                 }}
                             >
                                 <ListItemIcon><PreviewIcon fontSize='small' /></ListItemIcon>
@@ -367,9 +412,8 @@ export default function AssignmentQuestionManager() {
                             </MenuItem>
                             <MenuItem
                                 onClick={() => {
-                                    const target = assignments.find(a => a.id === actionTargetId);
                                     closeActions();
-                                    if (target) startEdit(target);
+                                    if (actionTarget) startEdit(actionTarget);
                                 }}
                             >
                                 <ListItemIcon><EditIcon fontSize='small' /></ListItemIcon>

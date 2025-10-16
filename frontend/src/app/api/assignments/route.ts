@@ -27,8 +27,12 @@ export async function GET(req: Request) {
             }
         }
         if (!rosterActive) return NextResponse.json({ error: 'access revoked' }, { status: 403 });
+        const baseSql = `SELECT id, title, course, difficulty, points, due, tags, attempts_allowed as "attemptsAllowed", published FROM assignments WHERE owner_id = current_setting('app.current_instructor')::uuid`;
+        const sql = payload.role === 'student'
+            ? `${baseSql} AND published = true ORDER BY created_at DESC LIMIT 500`
+            : `${baseSql} ORDER BY created_at DESC LIMIT 500`;
         const { rows: assignments } = await withInstructorContext(instructorId, () =>
-            query<Assignment>(`SELECT id, title, course, difficulty, points, due, tags, attempts_allowed as "attemptsAllowed" FROM assignments WHERE owner_id = current_setting('app.current_instructor')::uuid ORDER BY created_at DESC LIMIT 500`)
+            query<Assignment>(sql)
         );
         if (!includeQuestions) return NextResponse.json(assignments);
 
@@ -70,16 +74,16 @@ export async function POST(req: Request) {
         const payload = verifyJwt(token);
         if (!payload) { console.error('[assignments.POST] invalid token'); return NextResponse.json({ error: 'invalid token' }, { status: 401 }); }
         const body: NewAssignmentPayload & { attemptsAllowed?: number } = await req.json();
-        const { title, course, difficulty, points, due, tags, attemptsAllowed } = body;
+        const { title, course, difficulty, points, due, tags, attemptsAllowed, published } = body;
         if (!title) return NextResponse.json({ error: 'Title required' }, { status: 400 });
         const minAttempts = (attemptsAllowed === undefined || attemptsAllowed === null)
             ? 3
             : Math.max(1, Math.floor(Number(attemptsAllowed)));
         const { rows } = await withInstructorContext(payload.sub, () => query<Assignment>(
-            `INSERT INTO assignments (title, course, difficulty, points, due, tags, attempts_allowed, owner_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,current_setting('app.current_instructor')::uuid)
-       RETURNING id, title, course, difficulty, points, due, tags, attempts_allowed as "attemptsAllowed"`,
-            [title, course || 'Course', difficulty || 'Beginner', points || 0, due || '', Array.isArray(tags) ? tags : [], minAttempts]
+            `INSERT INTO assignments (title, course, difficulty, points, due, tags, attempts_allowed, published, owner_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,current_setting('app.current_instructor')::uuid)
+       RETURNING id, title, course, difficulty, points, due, tags, attempts_allowed as "attemptsAllowed", published`,
+            [title, course || 'Course', difficulty || 'Beginner', points || 0, due || '', Array.isArray(tags) ? tags : [], minAttempts, published === true]
         ));
         return NextResponse.json(rows[0]);
     } catch (e) {
@@ -96,15 +100,29 @@ export async function PATCH(req: Request) {
         const payload = verifyJwt(token);
         if (!payload) { console.error('[assignments.PATCH] invalid token'); return NextResponse.json({ error: 'invalid token' }, { status: 401 }); }
         const body: Partial<AssignmentPatch> = await req.json();
-        const { id, title, course, difficulty, points, due, tags, attemptsAllowed } = body || {};
+        const { id, title, course, difficulty, points, due, tags, attemptsAllowed, published } = body || {};
         if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
-        const minAttempts = (attemptsAllowed === undefined || attemptsAllowed === null)
+        const nextTitle = title === undefined ? null : title;
+        const nextCourse = course === undefined ? null : course;
+        const nextDifficulty = difficulty === undefined ? null : difficulty;
+        const nextPoints = points === undefined || points === null ? null : Number(points);
+        const nextDue = due === undefined ? null : due;
+        const nextTags = tags === undefined ? null : (Array.isArray(tags) ? tags : []);
+        const nextAttemptsAllowed = (attemptsAllowed === undefined || attemptsAllowed === null)
             ? null
             : Math.max(1, Math.floor(Number(attemptsAllowed)));
+        const nextPublished = published === undefined ? null : !!published;
         const { rows } = await withInstructorContext(payload.sub, () => query<Assignment>(`UPDATE assignments SET 
-        title=$2, course=$3, difficulty=$4, points=$5, due=$6, tags=$7, attempts_allowed=COALESCE($8, attempts_allowed)
-        WHERE id=$1 AND owner_id = current_setting('app.current_instructor')::uuid
-        RETURNING id, title, course, difficulty, points, due, tags, attempts_allowed as "attemptsAllowed"`, [id, title || 'Untitled', course || 'Course', difficulty || 'Beginner', points || 0, due || '', Array.isArray(tags) ? tags : [], minAttempts]));
+    title=COALESCE($2, title),
+    course=COALESCE($3, course),
+    difficulty=COALESCE($4, difficulty),
+    points=COALESCE($5, points),
+    due=COALESCE($6, due),
+    tags=COALESCE($7, tags),
+    attempts_allowed=COALESCE($8, attempts_allowed),
+    published=COALESCE($9, published)
+    WHERE id=$1 AND owner_id = current_setting('app.current_instructor')::uuid
+    RETURNING id, title, course, difficulty, points, due, tags, attempts_allowed as "attemptsAllowed", published`, [id, nextTitle, nextCourse, nextDifficulty, nextPoints, nextDue, nextTags, nextAttemptsAllowed, nextPublished]));
         if (!rows.length) return NextResponse.json({ error: 'Not found' }, { status: 404 });
         return NextResponse.json(rows[0]);
     } catch (e) {

@@ -2,8 +2,8 @@ import type { Assignment, Submission, GradeResponse } from './types';
 
 
 export const demoAssignments: Assignment[] = [
-    { id: 'a1', title: 'Basic SELECT & WHERE', course: 'DB101 — Intro to SQL', difficulty: 'Beginner', points: 10, due: '2025-09-05', tags: ['SELECT', 'WHERE', 'FILTERS'], attemptsAllowed: 3 },
-    { id: 'a2', title: 'JOINs & Aggregates', course: 'DB201 — Intermediate SQL', difficulty: 'Intermediate', points: 20, due: '2025-09-12', tags: ['JOIN', 'GROUP BY', 'HAVING'], attemptsAllowed: 3 },
+    { id: 'a1', title: 'Basic SELECT & WHERE', course: 'DB101 — Intro to SQL', difficulty: 'Beginner', points: 10, due: '2025-09-05', tags: ['SELECT', 'WHERE', 'FILTERS'], attemptsAllowed: 3, published: true },
+    { id: 'a2', title: 'JOINs & Aggregates', course: 'DB201 — Intermediate SQL', difficulty: 'Intermediate', points: 20, due: '2025-09-12', tags: ['JOIN', 'GROUP BY', 'HAVING'], attemptsAllowed: 3, published: true },
 ];
 
 
