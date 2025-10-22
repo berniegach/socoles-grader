@@ -51,7 +51,7 @@ const DEFAULTS: Settings = {
 };
 
 export default function InstructorSettings() {
-    const { user, setUser } = useAuth();
+    const { user, setUser, authFetch } = useAuth();
     const stored = useMemo(() => {
         try {
             const raw = localStorage.getItem('sqlgrader.settings');
@@ -128,17 +128,16 @@ export default function InstructorSettings() {
         setPurging(true);
         (async () => {
             try {
-                const authRaw = localStorage.getItem('auth.token');
-                const token = authRaw ? JSON.parse(authRaw) : null;
-                const res = await fetch('/api/instructor/purge', { method: 'DELETE', headers: token ? { Authorization: `Bearer ${token}` } : {} });
+                const res = await authFetch('/api/instructor/purge', { method: 'DELETE' });
                 if (!res.ok) {
                     const d = await res.json().catch(() => ({}));
                     throw new Error(d.error || 'Failed');
                 }
-                // Clear local storage & sign out proxy
-                localStorage.clear();
-                setNote({ type: 'success', msg: 'Account data deleted. Redirecting…' });
-                setTimeout(() => { window.location.href = '/'; }, 1200);
+                // Clear local storage and trigger full sign-out (app + NextAuth + IdP)
+                try { localStorage.clear(); sessionStorage.clear(); } catch { }
+                setNote({ type: 'success', msg: 'Account deleted. Signing out…' });
+                // Redirect to IdP logout endpoint which will clear local session then IdP SSO
+                window.location.href = '/api/auth/idp-logout?redirect=/';
             } catch (e: any) {
                 setNote({ type: 'error', msg: e.message || 'Delete failed' });
             } finally {

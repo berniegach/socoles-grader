@@ -1,7 +1,9 @@
 "use client";
-import { use, useEffect, useState } from 'react';
+import { use, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Box, Card, CardContent, CardHeader, TextField, Button, Alert, LinearProgress, Typography, Stack } from '@mui/material';
+import KeyIcon from '@mui/icons-material/VpnKey';
+import { signIn } from 'next-auth/react';
 import { useAuth } from '@/features/auth/AuthProvider';
 
 export default function InviteAcceptPage({ params }: { params: Promise<{ token: string }> }) {
@@ -9,8 +11,6 @@ export default function InviteAcceptPage({ params }: { params: Promise<{ token: 
     const router = useRouter();
     const [name, setName] = useState('');
     const [email, setEmail] = useState('');
-    const [password, setPassword] = useState('');
-    const [confirm, setConfirm] = useState('');
     const [busy, setBusy] = useState(false);
     const [loading, setLoading] = useState(true);
     const [inviteOk, setInviteOk] = useState(false);
@@ -18,6 +18,10 @@ export default function InviteAcceptPage({ params }: { params: Promise<{ token: 
     const [courseName, setCourseName] = useState<string>('');
     const [err, setErr] = useState('');
     const { setUser } = useAuth();
+    // SSO session detection
+    const [ssoReady, setSsoReady] = useState(false);
+    const [ssoEmail, setSsoEmail] = useState<string | null>(null);
+    const autoExchangedRef = useRef(false);
 
     // Load invite details (name/email) and lock them in the UI
     useEffect(() => {
@@ -54,45 +58,138 @@ export default function InviteAcceptPage({ params }: { params: Promise<{ token: 
         return () => { cancelled = true; };
     }, [token]);
 
-    async function accept() {
-        setErr(''); setNote(''); setBusy(true);
-        try {
-            if (!password || password !== confirm) throw new Error('Passwords do not match');
-            const res = await fetch('/api/student/signup-from-invite', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token, password }) });
-            const data = await res.json();
-            if (!res.ok) throw new Error(data?.error || 'Failed to accept invite');
-            // store student session
-            const { token: studentToken, student } = data || {};
-            localStorage.setItem('sqlgrader.student', JSON.stringify({ token: studentToken, id: student?.id, email: student?.email, name: student?.name, instructorId: student?.instructorId }));
-            setUser({ name: student?.email, role: 'student', token: studentToken, instructorId: student?.instructorId });
-            setNote('Invite accepted. Redirecting...');
-            // Persist desired initial tab before landing on root
-            try { sessionStorage.setItem('appshell.active', 's-dash'); } catch { /* ignore */ }
-            // Fire event in case user remains on same page with shell already mounted (unlikely)
-            window.dispatchEvent(new CustomEvent('appshell:navigate', { detail: { id: 's-dash' } }));
-            // Navigate to home so AppShell mounts (if not already)
-            router.push('/');
-        } catch (e: unknown) {
-            setErr(e instanceof Error ? e.message : 'Failed');
-        } finally {
-            setBusy(false);
+    // Detect SSO session and auto-exchange on return from Keycloak
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            try {
+                const res = await fetch('/api/auth/session', { cache: 'no-store' });
+                if (!res.ok) { if (!cancelled) { setSsoReady(false); setSsoEmail(null); } return; }
+                const data = await res.json();
+                const email: string | undefined = data?.user?.email;
+                if (cancelled) return;
+                const ready = !!email;
+                setSsoReady(ready);
+                setSsoEmail(email ?? null);
+            } catch {
+                if (!cancelled) { setSsoReady(false); setSsoEmail(null); }
+            }
+        })();
+        return () => { cancelled = true; };
+    }, []);
+
+    useEffect(() => {
+        // After returning from IdP with a session, automatically complete the exchange once
+        if (ssoReady && inviteOk && !loading && !busy && !autoExchangedRef.current) {
+            autoExchangedRef.current = true;
+            (async () => {
+                try {
+                    setBusy(true);
+                    const ex = await fetch('/api/auth/student/exchange', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token }) });
+                    const data = await ex.json();
+                    if (!ex.ok) {
+                        // Show error but don't loop
+                        throw new Error(data?.error || 'SSO accept failed');
+                    }
+                    const { token: studentToken, student } = data || {};
+                    localStorage.setItem('sqlgrader.student', JSON.stringify({ token: studentToken, id: student?.id, email: student?.email, name: student?.name, instructorId: student?.instructorId }));
+                    setUser({ name: student?.email, role: 'student', token: studentToken, instructorId: student?.instructorId });
+                    setNote('Invite accepted via SSO. Redirecting...');
+                    try { sessionStorage.setItem('appshell.active', 's-dash'); } catch { }
+                    window.dispatchEvent(new CustomEvent('appshell:navigate', { detail: { id: 's-dash' } }));
+                    router.push('/');
+                } catch (e: unknown) {
+                    setErr(e instanceof Error ? e.message : 'SSO accept failed');
+                } finally {
+                    setBusy(false);
+                }
+            })();
         }
+    }, [ssoReady, inviteOk, loading, busy, router, setUser, token]);
+
+    async function acceptWithSSO() {
+        // Always send the user to the Keycloak sign-in page; they will return here
+        // and the automatic exchange will complete the flow.
+        await signIn('keycloak', { callbackUrl: `/invite/${encodeURIComponent(token)}` });
     }
 
     return (
-        <Box sx={{ minHeight: '100vh', display: 'grid', placeItems: 'center', p: 2 }}>
-            <Card sx={{ width: '100%', maxWidth: 520 }}>
-                <CardHeader title={`Join ${courseName ? courseName : 'Course'}`} subheader={<Typography variant="body2">{courseName ? `You're accepting an invite to join the course ${courseName}. Create your password to continue.` : 'Create your password to join and sign in later'}</Typography>} />
+        <Box
+            sx={{
+                minHeight: '100vh',
+                display: 'grid',
+                placeItems: 'center',
+                p: 3,
+                background: (t) => `radial-gradient(900px 480px at 80% -10%, rgba(29, 78, 216, 0.08), transparent 60%), ${t.palette.background.default}`,
+            }}
+        >
+            <Card
+                sx={{
+                    width: '100%',
+                    maxWidth: 560,
+                    borderRadius: '6px',
+                    overflow: 'hidden',
+                    borderColor: 'rgba(29, 78, 216, 0.10)',
+                    boxShadow: '0 6px 20px rgba(29, 78, 216, 0.08)',
+                }}
+                variant="outlined"
+            >
+                {/* Gradient header to match auth pages */}
+                <CardHeader
+                    titleTypographyProps={{ sx: { fontWeight: 700 } }}
+                    title={`Join ${courseName ? courseName : 'Course'}`}
+                    subheader={
+                        <Typography variant="body2" sx={{ opacity: 0.9 }}>
+                            {courseName
+                                ? `You're accepting an invite to join the course ${courseName}. Create your account to continue.`
+                                : 'Create your account to join and sign in later'}
+                        </Typography>
+                    }
+                    sx={{
+                        px: 2,
+                        py: 2,
+                        textAlign: 'center',
+                        color: 'primary.contrastText',
+                        background: 'linear-gradient(90deg,#191654,#43C6AC)',
+                    }}
+                />
+
                 {(busy || loading) && <LinearProgress />}
-                <CardContent>
+
+                <CardContent sx={{ p: 3 }}>
                     {!!note && <Alert severity="success" sx={{ mb: 2 }}>{note}</Alert>}
-                    {!!err && <Alert severity="error" sx={{ mb: 2 }}>{err}</Alert>}
+                    {!!err && <Alert severity="error" sx={{ mb: 2 }}>
+                        {err}
+                        {err.toLowerCase().includes('email') && (
+                            <Button
+                                variant="text"
+                                color="secondary"
+                                size="small"
+                                sx={{ ml: 2, textTransform: 'none' }}
+                                onClick={() => { window.location.href = '/api/auth/idp-logout?redirect=/invite/' + encodeURIComponent(token); }}
+                            >
+                                Log out of Keycloak
+                            </Button>
+                        )}
+                    </Alert>}
+
                     <Stack spacing={1.5}>
                         <TextField label="Full name" size="small" fullWidth value={name} disabled />
                         <TextField label="Email" size="small" fullWidth value={email} disabled />
-                        <TextField label="Password" type="password" size="small" fullWidth value={password} onChange={(e) => setPassword(e.target.value)} />
-                        <TextField label="Confirm Password" type="password" size="small" fullWidth value={confirm} onChange={(e) => setConfirm(e.target.value)} />
-                        <Button variant="contained" onClick={accept} disabled={busy || loading || !inviteOk || !password || password !== confirm}>Accept & Create Account</Button>
+                        <Button
+                            variant="outlined"
+                            color="secondary"
+                            startIcon={<KeyIcon />}
+                            onClick={acceptWithSSO}
+                            disabled={busy || loading || !inviteOk}
+                            sx={{
+                                alignSelf: 'center',
+                                borderColor: (t) => t.palette.secondary.main,
+                                '&:hover': { background: (t) => `${t.palette.secondary.main}12` },
+                            }}
+                        >
+                            Continue with Keycloak
+                        </Button>
                     </Stack>
                 </CardContent>
             </Card>

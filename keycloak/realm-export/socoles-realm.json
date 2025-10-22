@@ -1,0 +1,34 @@
+{
+    "realm": "socoles",
+    "enabled": true,
+    "registrationAllowed": true,
+    "loginWithEmailAllowed": true,
+    "resetPasswordAllowed": true,
+    "sslRequired": "none",
+    "clients": [
+        {
+            "clientId": "socoles-frontend",
+            "name": "SOCOLES Frontend",
+            "protocol": "openid-connect",
+            "publicClient": false,
+            "secret": "change-me",
+            "directAccessGrantsEnabled": false,
+            "standardFlowEnabled": true,
+            "redirectUris": [
+                "http://localhost:3000/auth/student/callback",
+                "http://localhost:3000/auth/instructor/callback",
+                "http://localhost:3000/api/auth/callback/*",
+                "http://127.0.0.1:3000/api/auth/callback/*",
+                "http://localhost:3000/invite/*",
+                "http://127.0.0.1:3000/invite/*"
+            ],
+            "webOrigins": [
+                "http://localhost:3000",
+                "http://127.0.0.1:3000"
+            ],
+            "attributes": {
+                "post.logout.redirect.uris": "http://localhost:3000/\nhttp://localhost:3000/*\nhttp://127.0.0.1:3000/\nhttp://127.0.0.1:3000/*\nhttp://localhost:3000/invite/*\nhttp://127.0.0.1:3000/invite/*"
+            }
+        }
+    ]
+}

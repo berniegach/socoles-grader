@@ -1,5 +1,25 @@
 services:
 
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0
+    command: start-dev --import-realm
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      # Admin console login (change in your .env
+      - KEYCLOAK_ADMIN=${KEYCLOAK_ADMIN:-admin}
+      - KEYCLOAK_ADMIN_PASSWORD=${KEYCLOAK_ADMIN_PASSWORD:-admin}
+      # Optional: set a public hostname if using a custom domain / proxy
+      # - KC_HOSTNAME=${KEYCLOAK_HOSTNAME}
+    volumes:
+      - ./keycloak/realm-export:/opt/keycloak/data/import:ro
+    healthcheck:
+      test: [ "CMD", "bash", "-lc", "curl -fsS http://localhost:8080/realms/master/.well-known/openid-configuration >/dev/null" ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
   db:
     image: postgres:14
     restart: unless-stopped
@@ -51,11 +71,12 @@ services:
   frontend:
     image: ${FRONTEND_IMAGE:-ghcr.io/berniegach/socoles-frontend:1.0.3}
     # Uncomment to build locally instead of pulling
-    # build:
-    #   context: ./frontend
-    #   dockerfile: Dockerfile
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
     depends_on:
       - backend
+      - keycloak
     restart: unless-stopped
     ports:
       - "127.0.0.1:3000:3000"
@@ -65,6 +86,21 @@ services:
       - NEXT_PUBLIC_SOCOLES_API_URL=${NEXT_PUBLIC_SOCOLES_API_URL:-http://localhost:5000}
       - NEXT_PUBLIC_SOCOLES_GRADE_PATH=/grade-queries
       - SOCOLES_INTERNAL_API_URL=${SOCOLES_INTERNAL_API_URL:-http://backend:5000}
+      # NextAuth + Keycloak
+      - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost:3000}
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
+      # Issuer must be reachable by BOTH the browser and this container.
+      # For an easy local setup, map 'keycloak' to 127.0.0.1 in /etc/hosts, then this works everywhere:
+      #   127.0.0.1 keycloak
+      - KEYCLOAK_ISSUER=${KEYCLOAK_ISSUER:-http://keycloak:8080/realms/socoles}
+      # Public issuer host for browser redirects.
+      # add `127.0.0.1 keycloak` to your /etc/hosts so the browser can resolve the same host as containers.
+      - KEYCLOAK_ISSUER_PUBLIC=${KEYCLOAK_ISSUER_PUBLIC:-http://localhost:8080/realms/socoles}
+      - KEYCLOAK_CLIENT_ID=${KEYCLOAK_CLIENT_ID:-socoles-frontend}
+      - KEYCLOAK_CLIENT_SECRET=${KEYCLOAK_CLIENT_SECRET:-change-me}
+      - KEYCLOAK_LOGOUT_REDIRECT_URI=${KEYCLOAK_LOGOUT_REDIRECT_URI:-http://localhost:3000/}
+      # Instructor provisioning
+      - INSTRUCTOR_SIGNUP_CODE=${INSTRUCTOR_SIGNUP_CODE}
       # Frontend uses primary DB (manageclass)
       - PGHOST=db
       - PGPORT=5432

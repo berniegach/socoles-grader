@@ -127,7 +127,21 @@ export default function AppShell() {
         }
     }, [role]);
 
-    const handleSignOut = () => { try { localStorage.removeItem('sqlgrader.instructor'); localStorage.removeItem('sqlgrader.student'); } catch { } setUser(null); };
+    const handleSignOut = async () => {
+        try {
+            // Clear any local app auth caches first
+            localStorage.removeItem('sqlgrader.instructor');
+            localStorage.removeItem('sqlgrader.student');
+            sessionStorage.removeItem('appshell.active');
+            sessionStorage.removeItem('appshell.deepLink');
+        } catch { /* ignore */ }
+        setUser(null);
+        // Perform full logout (local + IdP). Route will handle local signout first, then IdP end-session.
+        if (typeof window !== 'undefined') {
+            window.location.href = '/api/auth/idp-logout?redirect=/';
+            return;
+        }
+    };
 
     return (
         <Box sx={{ display: 'flex', minHeight: '100vh' }}>
