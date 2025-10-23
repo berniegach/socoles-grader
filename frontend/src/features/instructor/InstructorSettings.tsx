@@ -1,5 +1,5 @@
 'use client';
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, useCallback } from 'react';
 import Grid from '@mui/material/Grid';
 import {
     Box,
@@ -30,6 +30,7 @@ import type { GradingOptions as GradingOptionsType } from '@/lib/types';
 import { DEFAULT_GRADING_OPTIONS } from '@/lib/api';
 import PageCard from '@/components/PageCard';
 import HeaderActions from '@/components/HeaderActions';
+import HeaderOverflowMenu from '@/components/HeaderOverflowMenu';
 import { useAuth } from '@/features/auth/AuthProvider';
 
 type Settings = {
@@ -52,33 +53,50 @@ const DEFAULTS: Settings = {
 
 export default function InstructorSettings() {
     const { user, setUser, authFetch } = useAuth();
-    const stored = useMemo(() => {
-        try {
-            const raw = localStorage.getItem('sqlgrader.settings');
-            if (!raw) return DEFAULTS;
-            const parsed = JSON.parse(raw) || {};
-            // drop deprecated keys if present
-            const { theme: _t, denseTables: _d, allowPartialCredit: _ap, maxRows: _mr, timeoutSec: _to, randomSeed: _rs, plagiarismCheck: _pc, apiBase: _ab, gradePath: _gp, ...rest } = parsed;
-            const merged = { ...DEFAULTS, ...(rest as Partial<Settings>) } as Settings;
-            if (!merged.gradingDefaults) merged.gradingDefaults = { ...DEFAULT_GRADING_OPTIONS };
-            return merged;
-        } catch { return DEFAULTS; }
-    }, []);
-
-    const [s, setS] = useState<Settings>(stored);
+    // State for settings
+    const [s, setS] = useState<Settings>(DEFAULTS);
+    // Track loading state for settings fetch
+    const [loadingSettings, setLoadingSettings] = useState(true);
     const [accountEmail, setAccountEmail] = useState<string>('');
     const [accountName, setAccountName] = useState<string>('');
     const [nameDirty, setNameDirty] = useState(false);
+    // Fetch instructor settings from backend on mount
     useEffect(() => {
-        try {
-            const raw = localStorage.getItem('auth.current');
-            if (raw) {
-                const parsed = JSON.parse(raw);
-                if (parsed?.email) setAccountEmail(parsed.email);
-                if (parsed?.name) setAccountName(parsed.name);
+        (async () => {
+            setLoadingSettings(true);
+            try {
+                const res = await authFetch('/api/instructor/settings', { method: 'GET' });
+                if (res.ok) {
+                    const data = await res.json();
+                    setS({
+                        courseName: data.course_name || DEFAULTS.courseName,
+                        enrollmentCode: data.enrollment_code || DEFAULTS.enrollmentCode,
+                        attempts: data.attempts ?? DEFAULTS.attempts,
+                        latePenalty: data.late_penalty ?? DEFAULTS.latePenalty,
+                        passThreshold: data.pass_threshold ?? DEFAULTS.passThreshold,
+                        gradingDefaults: data.grading_defaults || { ...DEFAULT_GRADING_OPTIONS },
+                    });
+                }
+            } catch {
+                // fallback: do nothing, keep defaults
+            } finally {
+                setLoadingSettings(false);
             }
-        } catch { /* ignore */ }
-    }, []);
+        })();
+        // Prefer user.email, fallback to localStorage
+        if (user?.email) {
+            setAccountEmail(user.email);
+        } else {
+            try {
+                const raw = localStorage.getItem('auth.current');
+                if (raw) {
+                    const parsed = JSON.parse(raw);
+                    if (parsed?.email) setAccountEmail(parsed.email);
+                    if (parsed?.name) setAccountName(parsed.name);
+                }
+            } catch { /* ignore */ }
+        }
+    }, [authFetch, user]);
 
     function saveAccountName() {
         try {
@@ -98,15 +116,43 @@ export default function InstructorSettings() {
     const [purging, setPurging] = useState(false);
     const [confirmText, setConfirmText] = useState('');
 
-    function save() {
-        localStorage.setItem('sqlgrader.settings', JSON.stringify(s));
-        setNote({ type: 'success', msg: 'Settings saved locally.' });
-    }
-    function reset() {
+    // Save settings to backend
+    const save = useCallback(async () => {
+        try {
+            setNote(null);
+            const res = await authFetch('/api/instructor/settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(s),
+            });
+            if (res.ok) {
+                setNote({ type: 'success', msg: 'Settings saved and synced.' });
+            } else {
+                const err = await res.json().catch(() => ({}));
+                setNote({ type: 'error', msg: err.error || 'Failed to save settings.' });
+            }
+        } catch {
+            setNote({ type: 'error', msg: 'Failed to save settings.' });
+        }
+    }, [s, authFetch]);
+    // Reset settings to defaults and sync to backend
+    const reset = useCallback(async () => {
         setS(DEFAULTS);
-        localStorage.removeItem('sqlgrader.settings');
-        setNote({ type: 'info', msg: 'Settings reset to defaults.' });
-    }
+        try {
+            const res = await authFetch('/api/instructor/settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(DEFAULTS),
+            });
+            if (res.ok) {
+                setNote({ type: 'info', msg: 'Settings reset to defaults and synced.' });
+            } else {
+                setNote({ type: 'error', msg: 'Failed to reset settings.' });
+            }
+        } catch {
+            setNote({ type: 'error', msg: 'Failed to reset settings.' });
+        }
+    }, [authFetch]);
 
 
     function downloadStudentsTemplate() {
@@ -146,17 +192,35 @@ export default function InstructorSettings() {
         })();
     }
 
+
     const headerActions = (
-        <HeaderActions
-            actions={[
-                { key: 'save-all', label: 'Save All', ariaLabel: 'Save all settings', icon: <SaveIcon fontSize='small' />, onClick: save },
-                { key: 'reset', label: 'Reset', ariaLabel: 'Reset settings', icon: <RestartAltIcon fontSize='small' />, onClick: reset },
-            ]}
-        />
+        <>
+            <HeaderActions
+                actions={[
+                    { key: 'save-all', label: 'Save All', ariaLabel: 'Save all settings', icon: <SaveIcon fontSize='small' />, onClick: save },
+                    { key: 'reset', label: 'Reset', ariaLabel: 'Reset settings', icon: <RestartAltIcon fontSize='small' />, onClick: reset },
+                ]}
+            />
+            <HeaderOverflowMenu
+                actions={[
+                    {
+                        key: 'delete-account',
+                        label: 'Delete Account',
+                        icon: <DeleteForeverIcon color="error" fontSize="small" />,
+                        onClick: () => setPurgeOpen(true),
+                    },
+                ]}
+            />
+        </>
     );
 
     return (
         <>
+            {loadingSettings && (
+                <Snackbar open anchorOrigin={{ vertical: 'top', horizontal: 'center' }}>
+                    <Alert severity="info">Loading settings…</Alert>
+                </Snackbar>
+            )}
             <PageCard headerTitle='Settings' headerProps={{ height: 56 }} headerActions={headerActions} headerActionsVariant='plain'>
                 <Box sx={{ mb: 2 }}>
                     <Grid container spacing={2}>
@@ -168,19 +232,17 @@ export default function InstructorSettings() {
                                     <Grid container spacing={2}>
                                         <Grid size={{ xs: 12, md: 6 }}>
                                             <TextField
-                                                label="Display name"
-                                                value={accountName}
-                                                onChange={(e) => { setAccountName(e.target.value); setNameDirty(true); }}
-                                                onBlur={() => { if (nameDirty && accountName.trim()) saveAccountName(); }}
-                                                helperText={nameDirty ? 'Press Save or blur to persist' : ' '}
+                                                label="Names"
+                                                value={user?.name || accountName}
                                                 fullWidth
                                                 variant='outlined'
                                                 size='small'
                                                 inputProps={{ maxLength: 60 }}
+                                                disabled
                                             />
                                         </Grid>
                                         <Grid size={{ xs: 12, md: 6 }}>
-                                            <TextField label="Email" value={accountEmail || ''} fullWidth variant='outlined' size='small' InputProps={{ readOnly: true }} />
+                                            <TextField label="Email" value={accountEmail || ''} fullWidth variant='outlined' size='small' InputProps={{ readOnly: true }} disabled />
                                         </Grid>
                                     </Grid>
                                 </CardContent>
@@ -293,30 +355,6 @@ export default function InstructorSettings() {
                             </Card>
                         </Grid>
 
-                        {/* Danger Zone */}
-                        <Grid size={{ xs: 12, md: 6 }}>
-                            <Card>
-                                <CardHeader title="Danger Zone" subheader="Developer-only tools while wiring things up." />
-                                <CardContent>
-                                    <Alert severity="warning" icon={<WarningAmberIcon />}>
-                                        This resets local settings stored in your browser (safe to use in development).
-                                    </Alert>
-                                </CardContent>
-                                <CardActions sx={{ justifyContent: 'space-between' }}>
-                                    <Button startIcon={<RestartAltIcon />} color="warning" variant="outlined" onClick={reset}>
-                                        Reset to defaults
-                                    </Button>
-                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                        <IconButton color="error" onClick={() => setPurgeOpen(true)} title="Delete account & all data">
-                                            <DeleteForeverIcon />
-                                        </IconButton>
-                                        <Button startIcon={<CheckCircleOutlineIcon />} variant="contained" onClick={save}>
-                                            Save all
-                                        </Button>
-                                    </Box>
-                                </CardActions>
-                            </Card>
-                        </Grid>
                     </Grid>
                 </Box>
             </PageCard>

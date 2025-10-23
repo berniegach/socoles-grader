@@ -213,17 +213,21 @@ export default function QuestionManager() {
     const attemptsLeft = Math.max(0, attemptsAllowed - attemptsUsed);
     const [rubric, setRubric] = useState<{ syntax: number | null; semantics: number | null; results: number | null; absent?: { syntax?: boolean; semantics?: boolean; results?: boolean } }>({ syntax: 0, semantics: 0, results: 0 });
     // Per-question grading parameters
-    const savedDefaults: GradingOptionsType = useMemo(() => {
-        try {
-            const raw = localStorage.getItem('sqlgrader.settings');
-            const parsed = raw ? JSON.parse(raw) : null;
-            return { ...DEFAULT_GRADING_OPTIONS, ...(parsed?.gradingDefaults || {}) } as GradingOptionsType;
-        } catch {
-            return { ...DEFAULT_GRADING_OPTIONS } as GradingOptionsType;
-        }
-    }, []);
+    const [savedDefaults, setSavedDefaults] = useState<GradingOptionsType>({ ...DEFAULT_GRADING_OPTIONS });
+    useEffect(() => {
+        (async () => {
+            try {
+                const res = await authFetch('/api/instructor/settings', { method: 'GET' });
+                if (res.ok) {
+                    const data = await res.json();
+                    setSavedDefaults({ ...DEFAULT_GRADING_OPTIONS, ...(data.grading_defaults || {}) });
+                }
+            } catch { /* ignore */ }
+        })();
+    }, [authFetch]);
     const [useDefaultGrading, setUseDefaultGrading] = useState<boolean>(true);
-    const [customGrading, setCustomGrading] = useState<GradingOptionsType>({ ...savedDefaults });
+    const [customGrading, setCustomGrading] = useState<GradingOptionsType>({ ...DEFAULT_GRADING_OPTIONS });
+    useEffect(() => { setCustomGrading({ ...savedDefaults }); }, [savedDefaults]);
     const [gradingDlgOpen, setGradingDlgOpen] = useState(false);
 
     async function openPreview() {
@@ -390,16 +394,8 @@ export default function QuestionManager() {
         setTab(0);
         setEditingId(null);
         // grading parameters
-        try {
-            const raw = localStorage.getItem('sqlgrader.settings');
-            const parsed = raw ? JSON.parse(raw) : null;
-            const defaults = { ...DEFAULT_GRADING_OPTIONS, ...(parsed?.gradingDefaults || {}) } as any;
-            // @ts-ignore
-            setCustomGrading(defaults);
-        } catch {
-            // @ts-ignore
-            setCustomGrading({ ...DEFAULT_GRADING_OPTIONS } as any);
-        }
+        // Always use latest savedDefaults from backend
+        setCustomGrading({ ...savedDefaults });
         // @ts-ignore
         setUseDefaultGrading(true);
         // @ts-ignore

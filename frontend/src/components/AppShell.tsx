@@ -19,6 +19,7 @@ import ClassRoster from '@/features/instructor/ClassRoster';
 import type { Role } from '@/lib/types';
 import { useAuth } from '@/features/auth/AuthProvider';
 
+
 const drawerWidth = 260;
 type Item = { id: string; label: string; icon: React.ElementType };
 
@@ -111,21 +112,28 @@ export default function AppShell() {
         return () => window.removeEventListener('appshell:navigate', onNavigate as EventListener);
     }, []);
 
-    // Compute display name: for students prefer instructor-managed full name from stored session
-    const [displayName, setDisplayName] = useState<string | null>(null);
+    // Get course name for app bar (for instructors)
+    const [courseName, setCourseName] = useState<string>('');
     useEffect(() => {
-        if (role === 'student') {
+        (async () => {
             try {
-                const raw = localStorage.getItem('sqlgrader.student');
-                if (raw) {
-                    const parsed = JSON.parse(raw);
-                    if (parsed?.name) setDisplayName(parsed.name as string);
+                let res;
+                if (role === 'instructor') {
+                    res = await authFetch('/api/instructor/settings', { method: 'GET' });
+                } else {
+                    res = await authFetch('/api/student/course', { method: 'GET' });
                 }
-            } catch { /* ignore */ }
-        } else {
-            setDisplayName(null);
-        }
-    }, [role]);
+                if (res.ok) {
+                    const data = await res.json();
+                    setCourseName(data.course_name || '');
+                } else {
+                    setCourseName('');
+                }
+            } catch {
+                setCourseName('');
+            }
+        })();
+    }, [role, authFetch]);
 
     const handleSignOut = async () => {
         try {
@@ -149,7 +157,7 @@ export default function AppShell() {
                 <Toolbar sx={{ gap: 2, minHeight: 60 }}>
                     <Box component="img" src="/icons/student.gif" alt="Student" sx={{ height: 40, width: 'auto', display: 'block', borderRadius: 1, boxShadow: '0 0 0 2px rgba(255,255,255,0.25)' }} />
                     <Typography variant="h6" sx={{ flexGrow: 1, fontWeight: 600, letterSpacing: 0.25 }}>
-                        {displayName || user?.name?.split('@')[0] || 'Welcome'}
+                        {courseName || 'Course'}
                     </Typography>
                     <IconButton color="inherit" onClick={handleSignOut} title="Sign out" sx={{ bgcolor: 'rgba(0,0,0,0.15)', '&:hover': { bgcolor: 'rgba(0,0,0,0.25)' } }}>
                         <LogoutIcon />

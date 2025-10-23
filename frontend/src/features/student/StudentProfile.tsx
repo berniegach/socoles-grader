@@ -1,6 +1,6 @@
 'use client';
 import Grid from '@mui/material/Grid';
-import { Card, CardHeader, CardContent, CardActions, Typography, TextField, Button, Alert, LinearProgress, Box } from '@mui/material';
+import { Card, CardHeader, CardContent, Typography, TextField, Alert, LinearProgress, Box } from '@mui/material';
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/features/auth/AuthProvider';
 
@@ -8,9 +8,6 @@ export default function StudentProfile() {
     const { user, authFetch } = useAuth();
     const [fullName, setFullName] = useState('');
     const [email, setEmail] = useState('');
-    const [currentPassword, setCurrentPassword] = useState('');
-    const [newPassword, setNewPassword] = useState('');
-    const [confirm, setConfirm] = useState('');
     const [busy, setBusy] = useState(false);
     const [note, setNote] = useState<string | null>(null);
     const [err, setErr] = useState<string | null>(null);
@@ -34,23 +31,6 @@ export default function StudentProfile() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    async function changePassword() {
-        setErr(null); setNote(null); setBusy(true);
-        try {
-            if (!currentPassword || !newPassword) throw new Error('All fields are required');
-            if (newPassword !== confirm) throw new Error('Passwords do not match');
-            const res = await authFetch('/api/student/change-password', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ currentPassword, newPassword })
-            });
-            const data = await res.json().catch(() => ({}));
-            if (!res.ok) throw new Error(data?.error || 'Failed to update password');
-            setNote('Password updated');
-            setCurrentPassword(''); setNewPassword(''); setConfirm('');
-        } catch (e: unknown) {
-            setErr(e instanceof Error ? e.message : 'Failed');
-        } finally { setBusy(false); }
-    }
 
     return (
         <Box sx={{ display: 'grid', gap: 2 }}>
@@ -74,28 +54,6 @@ export default function StudentProfile() {
                     </Card>
                 </Grid>
 
-                <Grid size={12}>
-                    <Card>
-                        <CardHeader title="Change Password" subheader="Update your password for future sign-ins." />
-                        {busy && <LinearProgress />}
-                        <CardContent>
-                            <Grid container spacing={2}>
-                                <Grid size={{ xs: 12, md: 4 }}>
-                                    <TextField label="Current password" size="small" type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} fullWidth />
-                                </Grid>
-                                <Grid size={{ xs: 12, md: 4 }}>
-                                    <TextField label="New password" size="small" type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} fullWidth />
-                                </Grid>
-                                <Grid size={{ xs: 12, md: 4 }}>
-                                    <TextField label="Confirm new password" size="small" type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} fullWidth />
-                                </Grid>
-                            </Grid>
-                        </CardContent>
-                        <CardActions sx={{ justifyContent: 'flex-end' }}>
-                            <Button variant="contained" onClick={changePassword} disabled={busy || !currentPassword || !newPassword || newPassword !== confirm}>Update Password</Button>
-                        </CardActions>
-                    </Card>
-                </Grid>
             </Grid>
         </Box>
     );

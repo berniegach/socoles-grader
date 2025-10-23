@@ -3,7 +3,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { AuthProvider } from '@/features/auth/AuthProvider';
 
 export function AuthBootClient({ children }: { children: React.ReactNode }) {
-    const [user, setUser] = useState<{ name: string; role: 'instructor' | 'student'; token?: string; instructorId?: string; evaluator?: boolean } | null>(() => {
+    const [user, setUser] = useState<{ name: string; email?: string; role: 'instructor' | 'student'; token?: string; instructorId?: string; evaluator?: boolean } | null>(() => {
         // Synchronous restore so first render already has token
         if (typeof window === 'undefined') return null;
         try {
@@ -11,14 +11,14 @@ export function AuthBootClient({ children }: { children: React.ReactNode }) {
             if (raw) {
                 const parsed = JSON.parse(raw);
                 if (parsed?.token && parsed?.email) {
-                    return { name: parsed.email, role: 'instructor', token: parsed.token, instructorId: parsed.id };
+                    return { name: parsed.name || parsed.email, email: parsed.email, role: 'instructor', token: parsed.token, instructorId: parsed.id };
                 }
             }
             const sraw = localStorage.getItem('sqlgrader.student');
             if (sraw) {
                 const parsed = JSON.parse(sraw);
                 if (parsed?.token && parsed?.email) {
-                    return { name: parsed.email, role: 'student', token: parsed.token, instructorId: parsed.instructorId };
+                    return { name: parsed.name || parsed.email, email: parsed.email, role: 'student', token: parsed.token, instructorId: parsed.instructorId };
                 }
             }
         } catch { }

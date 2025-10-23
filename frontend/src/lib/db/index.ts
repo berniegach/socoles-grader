@@ -65,6 +65,21 @@ export async function scopedQuery<T = any>(instructorId: string, text: string, p
 }
 
 export async function initSchema() {
+  // Instructor settings for cross-device persistence
+  await query(`CREATE TABLE IF NOT EXISTS instructor_settings (
+    instructor_id UUID PRIMARY KEY REFERENCES instructors(id) ON DELETE CASCADE,
+    course_name TEXT NOT NULL DEFAULT '',
+    enrollment_code TEXT NOT NULL DEFAULT '',
+    attempts INT NOT NULL DEFAULT 3,
+    late_penalty NUMERIC NOT NULL DEFAULT 0.2,
+    pass_threshold NUMERIC NOT NULL DEFAULT 0.6,
+    grading_defaults JSONB
+  );`);
+  // Migrate late_penalty to NUMERIC if needed
+  try {
+    await query('ALTER TABLE instructor_settings ALTER COLUMN late_penalty TYPE NUMERIC USING late_penalty::numeric;');
+    await query('ALTER TABLE instructor_settings ALTER COLUMN late_penalty SET DEFAULT 0.2;');
+  } catch (e) { /* ignore if already numeric */ }
   // Fresh schema creation (no migrations)
   await query(`CREATE EXTENSION IF NOT EXISTS pgcrypto;`);
 

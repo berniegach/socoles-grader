@@ -2,9 +2,17 @@
 import { createContext, useContext } from 'react';
 import type { Role } from '@/lib/types';
 
+export type AuthUser = {
+    name: string;
+    email?: string;
+    role: Role;
+    token?: string;
+    instructorId?: string;
+    evaluator?: boolean;
+};
 export type AuthCtx = {
-    user: { name: string; role: Role; token?: string; instructorId?: string; evaluator?: boolean } | null;
-    setUser: (u: { name: string; role: Role; token?: string; instructorId?: string; evaluator?: boolean } | null) => void;
+    user: AuthUser | null;
+    setUser: (u: AuthUser | null) => void;
     authFetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 };
 

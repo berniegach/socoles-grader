@@ -16,12 +16,17 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ tok
         );
         if (!rows.length) return NextResponse.json({ error: 'not found' }, { status: 404 });
         const row = rows[0];
-        // Fetch a representative course name: latest assignment course for this instructor
+        // Fetch course name from instructor_settings for this instructor
         let courseName: string | null = null;
         if (row.owner_id) {
             try {
-                const a = await query<{ course: string }>(`SELECT course FROM assignments WHERE owner_id=$1 ORDER BY created_at DESC LIMIT 1`, [row.owner_id]);
-                if (a.rows.length) courseName = a.rows[0].course;
+                const settingsRes = await query<{ course_name: string }>(
+                    `SELECT course_name FROM instructor_settings WHERE instructor_id=$1 LIMIT 1`,
+                    [row.owner_id]
+                );
+                if (settingsRes.rows.length && settingsRes.rows[0].course_name && settingsRes.rows[0].course_name.trim()) {
+                    courseName = settingsRes.rows[0].course_name.trim();
+                }
             } catch { /* ignore */ }
         }
         return NextResponse.json({ email: row.email, name: row.name, expires_at: row.expires_at, used_at: row.used_at, courseName });

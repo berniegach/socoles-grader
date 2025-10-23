@@ -144,8 +144,23 @@ export async function POST(req: NextRequest) {
 
         const row = rows[0];
         const link = makeLink(row.token, req);
+        // Fetch the course name from instructor_settings using instructorId from JWT
+        let className = '';
+        try {
+            const settingsRes = await query<{ course_name: string }>(
+                `SELECT course_name FROM instructor_settings WHERE instructor_id = $1 LIMIT 1`,
+                [contextInstructorId]
+            );
+            if (settingsRes.rows.length && settingsRes.rows[0].course_name && settingsRes.rows[0].course_name.trim()) {
+                className = settingsRes.rows[0].course_name.trim();
+            } else {
+                className = 'your course';
+            }
+        } catch {
+            className = 'your course';
+        }
         // Try to send email (non-fatal on failure)
-        const emailResult = await sendInviteEmail({ to: row.email, name: row.name, link });
+        const emailResult = await sendInviteEmail({ to: row.email, name: row.name, link, className });
         const resp: InviteResponse & { emailSent: boolean } = { ...row, link, emailSent: !!emailResult.sent };
         return NextResponse.json(resp, { status: 201 });
     } catch (e: any) {

@@ -2,16 +2,23 @@ services:
 
   keycloak:
     image: quay.io/keycloak/keycloak:24.0
+    # For local development:
     command: start-dev --import-realm
+    # For production (uncomment):
+    # command: start --hostname socoles.cs.ru.nl --proxy edge --import-realm
     restart: unless-stopped
     ports:
+      # For local development:
       - "127.0.0.1:8080:8080"
+      # For production (uncomment):
+      # - "8080:8080"
     environment:
-      # Admin console login (change in your .env
+      # Admin console login (change in .env)
       - KEYCLOAK_ADMIN=${KEYCLOAK_ADMIN:-admin}
       - KEYCLOAK_ADMIN_PASSWORD=${KEYCLOAK_ADMIN_PASSWORD:-admin}
-      # Optional: set a public hostname if using a custom domain / proxy
-      # - KC_HOSTNAME=${KEYCLOAK_HOSTNAME}
+      # For production (uncomment):
+      # - KC_HOSTNAME=socoles.cs.ru.nl
+      # - KC_PROXY=edge
     volumes:
       - ./keycloak/realm-export:/opt/keycloak/data/import:ro
     healthcheck:
@@ -79,7 +86,10 @@ services:
       - keycloak
     restart: unless-stopped
     ports:
+      # For local development:
       - "127.0.0.1:3000:3000"
+      # For production (uncomment):
+      # - "3000:3000"
     env_file:
       - .env
     environment:
@@ -89,12 +99,12 @@ services:
       # NextAuth + Keycloak
       - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost:3000}
       - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
-      # Issuer must be reachable by BOTH the browser and this container.
-      # For an easy local setup, map 'keycloak' to 127.0.0.1 in /etc/hosts, then this works everywhere:
-      #   127.0.0.1 keycloak
+      # For production (uncomment):
+      # - NEXTAUTH_URL=https://socoles.cs.ru.nl
+      # - KEYCLOAK_ISSUER=https://socoles.cs.ru.nl/realms/socoles
+      # - KEYCLOAK_ISSUER_PUBLIC=https://socoles.cs.ru.nl/realms/socoles
+      # - KEYCLOAK_LOGOUT_REDIRECT_URI=https://socoles.cs.ru.nl
       - KEYCLOAK_ISSUER=${KEYCLOAK_ISSUER:-http://keycloak:8080/realms/socoles}
-      # Public issuer host for browser redirects.
-      # add `127.0.0.1 keycloak` to your /etc/hosts so the browser can resolve the same host as containers.
       - KEYCLOAK_ISSUER_PUBLIC=${KEYCLOAK_ISSUER_PUBLIC:-http://localhost:8080/realms/socoles}
       - KEYCLOAK_CLIENT_ID=${KEYCLOAK_CLIENT_ID:-socoles-frontend}
       - KEYCLOAK_CLIENT_SECRET=${KEYCLOAK_CLIENT_SECRET:-change-me}

@@ -68,18 +68,18 @@ export default function AssignmentQuestionManager() {
 
     // New assignment form
     const [title, setTitle] = useState('');
-    const [course, setCourse] = useState(() => {
-        // Pick default course from Instructor Settings stored in localStorage
-        try {
-            const raw = typeof window !== 'undefined' ? localStorage.getItem('sqlgrader.settings') : null;
-            if (raw) {
-                const parsed = JSON.parse(raw);
-                const name = (parsed?.courseName || '').toString().trim();
-                if (name) return name;
-            }
-        } catch { /* ignore */ }
-        return 'DB201 — Intermediate SQL';
-    });
+    const [course, setCourse] = useState('DB201 — Intermediate SQL');
+    useEffect(() => {
+        (async () => {
+            try {
+                const res = await authFetch('/api/instructor/settings', { method: 'GET' });
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.course_name) setCourse(data.course_name);
+                }
+            } catch { /* ignore */ }
+        })();
+    }, [authFetch]);
     const [difficulty, setDifficulty] = useState('Beginner');
     const [points, setPoints] = useState(0);
     const [due, setDue] = useState('');
@@ -138,17 +138,18 @@ export default function AssignmentQuestionManager() {
     }
     function startCreate() {
         setTitle('');
-        // Pull the course from saved Instructor Settings each time we create
-        try {
-            const raw = typeof window !== 'undefined' ? localStorage.getItem('sqlgrader.settings') : null;
-            if (raw) {
-                const parsed = JSON.parse(raw);
-                const name = (parsed?.courseName || '').toString().trim();
-                setCourse(name || 'DB201 — Intermediate SQL');
-            } else {
-                setCourse('DB201 — Intermediate SQL');
-            }
-        } catch { setCourse('DB201 — Intermediate SQL'); }
+        // Always fetch latest course name from backend
+        (async () => {
+            try {
+                const res = await authFetch('/api/instructor/settings', { method: 'GET' });
+                if (res.ok) {
+                    const data = await res.json();
+                    setCourse((data.course_name || 'DB201 — Intermediate SQL').toString().trim());
+                } else {
+                    setCourse('DB201 — Intermediate SQL');
+                }
+            } catch { setCourse('DB201 — Intermediate SQL'); }
+        })();
         setDifficulty('Beginner');
         setPoints(0);
         setDue('');

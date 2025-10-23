@@ -1,5 +1,6 @@
 'use client';
-import { useState, useRef, useMemo } from 'react';
+import { useState, useRef, useEffect } from 'react';
+import { useAuth } from '@/features/auth/AuthProvider';
 import { Box, Button, Card, CardContent, CardHeader, Typography, Snackbar, Alert, Chip, Stack, LinearProgress } from '@mui/material';
 import TuneIcon from '@mui/icons-material/Tune';
 import BarChartIcon from '@mui/icons-material/BarChart';
@@ -17,14 +18,19 @@ import PageCard from '@/components/PageCard';
 import HeaderActions from '@/components/HeaderActions';
 
 export default function BatchGrader() {
-    const gradingDefaults = useMemo(() => {
-        try {
-            const raw = localStorage.getItem('sqlgrader.settings');
-            if (!raw) return { ...DEFAULT_GRADING_OPTIONS };
-            const parsed = JSON.parse(raw) || {};
-            return { ...DEFAULT_GRADING_OPTIONS, ...(parsed.gradingDefaults || {}) };
-        } catch { return { ...DEFAULT_GRADING_OPTIONS }; }
-    }, []);
+    const { authFetch } = useAuth();
+    const [gradingDefaults, setGradingDefaults] = useState({ ...DEFAULT_GRADING_OPTIONS });
+    useEffect(() => {
+        (async () => {
+            try {
+                const res = await authFetch('/api/instructor/settings', { method: 'GET' });
+                if (res.ok) {
+                    const data = await res.json();
+                    setGradingDefaults({ ...DEFAULT_GRADING_OPTIONS, ...(data.grading_defaults || {}) });
+                }
+            } catch { /* ignore */ }
+        })();
+    }, [authFetch]);
     const [studentCsv, setStudentCsv] = useState<File | null>(null);
     const [studentPreview, setStudentPreview] = useState<{ headers: string[]; rows: any[] }>({ headers: [], rows: [] });
     const [refCsv, setRefCsv] = useState<File | null>(null);
@@ -41,6 +47,7 @@ export default function BatchGrader() {
     const [selectedQuestionNumber, setSelectedQuestionNumber] = useState<string>('');
 
     const [options, setOptions] = useState<GradingOptionsType>({ ...gradingDefaults });
+    useEffect(() => { setOptions({ ...gradingDefaults }); }, [gradingDefaults]);
 
     // Ref to the left column for scrolling on reset (mobile)
     const leftColumnRef = useRef<HTMLDivElement | null>(null);
@@ -53,15 +60,7 @@ export default function BatchGrader() {
         setRefPreview({ headers: [], rows: [] });
         setResults([]);
         setError('');
-        // reset to saved grading defaults if available
-        try {
-            const raw = localStorage.getItem('sqlgrader.settings');
-            const parsed = raw ? JSON.parse(raw) : null;
-            const saved = parsed && parsed.gradingDefaults ? parsed.gradingDefaults : null;
-            setOptions({ ...(saved || DEFAULT_GRADING_OPTIONS) });
-        } catch {
-            setOptions({ ...DEFAULT_GRADING_OPTIONS });
-        }
+        setOptions({ ...gradingDefaults });
         setQuestionNumbers([]);
         setSelectedQuestionNumber('');
         setRawCsv('');
