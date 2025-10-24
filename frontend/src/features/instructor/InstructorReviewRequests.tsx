@@ -36,6 +36,7 @@ export default function InstructorReviewRequests() {
     const [manualGrade, setManualGrade] = useState<string>('');
     const [manualFeedback, setManualFeedback] = useState<string>('');
     const [savingManual, setSavingManual] = useState(false);
+    const [saveSuccess, setSaveSuccess] = useState(false);
     // polling refs
     const msgPollRef = useRef<any>(null);
     const listPollRef = useRef<any>(null);
@@ -115,6 +116,9 @@ export default function InstructorReviewRequests() {
                 // Clear inputs
                 setManualFeedback('');
                 // keep grade to maybe apply again
+                // Show success feedback and temporarily disable button
+                setSaveSuccess(true);
+                setTimeout(() => setSaveSuccess(false), 2500);
             }
         } finally { setSavingManual(false); }
     }
@@ -238,7 +242,9 @@ export default function InstructorReviewRequests() {
                             <Box sx={{ maxHeight: 240, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: .75, mt: .5, pr: .5 }}>
                                 {messages.map(m => (
                                     <Box key={m.id} sx={{ alignSelf: m.senderRole === 'instructor' ? 'flex-end' : 'flex-start', maxWidth: '80%', p: .75, borderRadius: 1, bgcolor: m.senderRole === 'instructor' ? 'secondary.light' : 'grey.100', border: '1px solid', borderColor: 'divider' }}>
-                                        <Typography variant='caption' sx={{ display: 'block', fontWeight: 600 }}>{m.senderRole === 'instructor' ? 'Instructor' : 'Student'}</Typography>
+                                        <Typography variant='caption' sx={{ display: 'block', fontWeight: 600 }}>
+                                            {m.senderRole === 'instructor' ? 'Instructor' : 'Student'}{m.sender ? ` • ${m.sender}` : ''}
+                                        </Typography>
                                         <Typography variant='caption' sx={{ display: 'block', whiteSpace: 'pre-wrap' }}>{m.message}</Typography>
                                     </Box>
                                 ))}
@@ -268,7 +274,14 @@ export default function InstructorReviewRequests() {
                                     <TextField label='Grade' size='small' value={manualGrade} onChange={e => setManualGrade(e.target.value)} sx={{ width: 120 }} />
                                 </Box>
                                 <TextField multiline minRows={3} size='small' label='Feedback (one line per item)' value={manualFeedback} onChange={e => setManualFeedback(e.target.value)} />
-                                <Button size='small' variant='contained' disabled={savingManual} onClick={saveManualRegrade}>{savingManual ? 'Saving...' : 'Save Manual Regrade'}</Button>
+                                <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
+                                    <Button size='small' variant='contained' disabled={savingManual || saveSuccess} onClick={saveManualRegrade} startIcon={saveSuccess ? <DoneIcon fontSize='inherit' /> : undefined}>
+                                        {savingManual ? 'Saving...' : saveSuccess ? 'Saved' : 'Save Manual Regrade'}
+                                    </Button>
+                                    {saveSuccess && (
+                                        <Typography variant='caption' color='success.main'>Manual regrade saved.</Typography>
+                                    )}
+                                </Box>
                             </Card>
                         )}
                         {!fetchingSubmission && !activeSubmission && <Typography variant='caption' color='text.secondary'>Submission not found.</Typography>}
