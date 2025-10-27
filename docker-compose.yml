@@ -6,6 +6,9 @@ services:
     command: start-dev --import-realm
     # For production (uncomment):
     # command: start --hostname socoles.cs.ru.nl --proxy edge --import-realm
+    depends_on:
+      db:
+        condition: service_healthy
     restart: unless-stopped
     ports:
       # For local development:
@@ -16,10 +19,16 @@ services:
       # Admin console login (change in .env)
       - KEYCLOAK_ADMIN=${KEYCLOAK_ADMIN:-admin}
       - KEYCLOAK_ADMIN_PASSWORD=${KEYCLOAK_ADMIN_PASSWORD:-admin}
+      # Use Postgres for production-grade persistence
+      - KC_DB=postgres
+      - KC_DB_URL=jdbc:postgresql://db:5432/keycloak
+      - KC_DB_USERNAME=socoles-web
+      - KC_DB_PASSWORD=${POSTGRES_PASSWORD}
       # For production (uncomment):
       # - KC_HOSTNAME=socoles.cs.ru.nl
       # - KC_PROXY=edge
     volumes:
+      - keycloak_data:/opt/keycloak/data
       - ./keycloak/realm-export:/opt/keycloak/data/import:ro
     healthcheck:
       test: [ "CMD", "bash", "-lc", "curl -fsS http://localhost:8080/realms/master/.well-known/openid-configuration >/dev/null" ]
@@ -126,3 +135,4 @@ services:
       retries: 5
 volumes:
   pg_data:
+  keycloak_data:

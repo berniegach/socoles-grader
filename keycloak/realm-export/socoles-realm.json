@@ -15,19 +15,15 @@
             "directAccessGrantsEnabled": false,
             "standardFlowEnabled": true,
             "redirectUris": [
-                "http://localhost:3000/auth/student/callback",
-                "http://localhost:3000/auth/instructor/callback",
                 "http://localhost:3000/api/auth/callback/*",
-                "http://127.0.0.1:3000/api/auth/callback/*",
-                "http://localhost:3000/invite/*",
-                "http://127.0.0.1:3000/invite/*"
+                "http://127.0.0.1:3000/api/auth/callback/*"
             ],
             "webOrigins": [
                 "http://localhost:3000",
                 "http://127.0.0.1:3000"
             ],
             "attributes": {
-                "post.logout.redirect.uris": "http://localhost:3000/\nhttp://localhost:3000/*\nhttp://127.0.0.1:3000/\nhttp://127.0.0.1:3000/*\nhttp://localhost:3000/invite/*\nhttp://127.0.0.1:3000/invite/*"
+                "post.logout.redirect.uris": "http://localhost:3000/\nhttp://127.0.0.1:3000/"
             }
         }
     ]
