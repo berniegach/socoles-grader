@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useMemo } from 'react';
 import { Box, Button, Card, CardContent, Chip, LinearProgress, Snackbar, Alert, Table, TableBody, TableCell, TableHead, TableRow, TextField, Stack, IconButton, Tooltip, Typography, Switch, FormControlLabel } from '@mui/material';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
@@ -25,6 +25,13 @@ export default function ClassRoster() {
     const [email, setEmail] = useState('');
     // hidden file input ref for import CSV
     const inputRef = useRef<HTMLInputElement | null>(null);
+    const [search, setSearch] = useState('');
+
+    const rowsToShow = useMemo(() => {
+        const q = search.trim().toLowerCase();
+        if (!q) return rows;
+        return rows.filter(r => (r.name || '').toLowerCase().includes(q) || (r.email || '').toLowerCase().includes(q));
+    }, [rows, search]);
 
     async function load() {
         try {
@@ -65,6 +72,10 @@ export default function ClassRoster() {
 
     async function addOne() {
         if (!name.trim() || !email.trim()) { setErr('Name and email required'); return; }
+        // Prevent adding duplicate emails (case-insensitive)
+        const emailNorm = email.trim().toLowerCase();
+        const exists = rows.some(r => (r.email || '').toLowerCase() === emailNorm);
+        if (exists) { setErr('Email already exists'); return; }
         try {
             setBusy(true);
             const res = await authFetch('/api/roster', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: name.trim(), email: email.trim(), status: 'Invited' }) });
@@ -92,14 +103,34 @@ export default function ClassRoster() {
             skipEmptyLines: true,
             complete: async (results: { data: Array<Record<string, unknown>> }) => {
                 try {
-                    const records = (results.data || [])
-                        .map((r) => ({ name: String((r as any).name || (r as any).Name || '').trim(), email: String((r as any).email || (r as any).Email || '').trim() }))
+                    const parsed = (results.data || [])
+                        .map((r) => ({ name: String((r as any).name || (r as any).Name || '').trim(), email: String((r as any).email || (r as any).Email || '').trim().toLowerCase() }))
                         .filter((r) => r.name && r.email);
-                    if (!records.length) { setErr('No valid rows (need "name" and "email" columns)'); return; }
-                    const res = await authFetch('/api/roster', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ entries: records }) });
+                    if (!parsed.length) { setErr('No valid rows (need "name" and "email" columns)'); return; }
+                    // Skip duplicates that already exist in roster (case-insensitive) and within the CSV itself
+                    const existing = new Set(rows.map(x => (x.email || '').toLowerCase()));
+                    const seen = new Set<string>();
+                    const toImport: { name: string; email: string }[] = [];
+                    let skipped = 0;
+                    for (const rec of parsed) {
+                        const e = (rec.email || '').toLowerCase();
+                        if (!e || existing.has(e) || seen.has(e)) { skipped++; continue; }
+                        seen.add(e);
+                        toImport.push({ name: rec.name, email: e });
+                    }
+                    if (!toImport.length) {
+                        setErr(skipped > 0 ? `All emails already exist (${skipped} skipped)` : 'No valid rows to import');
+                        return;
+                    }
+                    const res = await authFetch('/api/roster', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ entries: toImport }) });
                     const data = await res.json();
-                    if (Array.isArray(data)) setRows((r) => [...data, ...r]); else setErr('Import failed');
-                    setNote(`Imported ${Array.isArray(data) ? data.length : 0} students`);
+                    if (Array.isArray(data)) {
+                        setRows((r) => [...data, ...r]);
+                        setNote(`Imported ${data.length} student${data.length === 1 ? '' : 's'}`);
+                        if (skipped > 0) setErr(`Skipped ${skipped} duplicate email${skipped === 1 ? '' : 's'}`);
+                    } else {
+                        setErr('Import failed');
+                    }
                 } catch (err: unknown) {
                     setErr((err as Error)?.message || 'Import failed');
                 } finally {
@@ -203,9 +234,28 @@ export default function ClassRoster() {
                         <Button variant="contained" startIcon={<PersonAddIcon />} onClick={addOne} disabled={busy}>Add</Button>
                     </Stack>
                 )}
+                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} justifyContent="flex-end" sx={{ mb: 1 }}>
+                    <TextField
+                        size="small"
+                        label="Search"
+                        type="search"
+                        placeholder="Search name or email"
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                        InputProps={{
+                            endAdornment: search ? (
+                                <IconButton aria-label="Clear search" size="small" onClick={() => setSearch('')}>
+                                    <CancelIcon fontSize="small" />
+                                </IconButton>
+                            ) : undefined,
+                        }}
+                        sx={{ width: { xs: '100%', sm: 300 } }}
+                    />
+                </Stack>
                 <Table size="small">
                     <TableHead>
                         <TableRow>
+                            <TableCell width={56}>#</TableCell>
                             <TableCell>Name</TableCell>
                             <TableCell>Email</TableCell>
                             <TableCell>Status</TableCell>
@@ -214,8 +264,9 @@ export default function ClassRoster() {
                         </TableRow>
                     </TableHead>
                     <TableBody>
-                        {rows.map((r) => (
+                        {rowsToShow.map((r, idx) => (
                             <TableRow key={r.id} hover>
+                                <TableCell>{idx + 1}</TableCell>
                                 <TableCell>{r.name}</TableCell>
                                 <TableCell>{r.email}</TableCell>
                                 <TableCell>
@@ -279,8 +330,12 @@ export default function ClassRoster() {
                                 </TableCell>
                             </TableRow>
                         ))}
-                        {!rows.length && (
-                            <TableRow><TableCell colSpan={isInstructor ? 5 : 4}>No students yet.</TableCell></TableRow>
+                        {rowsToShow.length === 0 && (
+                            <TableRow>
+                                <TableCell colSpan={isInstructor ? 6 : 5}>
+                                    {rows.length === 0 ? 'No students yet.' : 'No matches.'}
+                                </TableCell>
+                            </TableRow>
                         )}
                     </TableBody>
                 </Table>
