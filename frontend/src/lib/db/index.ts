@@ -65,8 +65,11 @@ export async function scopedQuery<T = any>(instructorId: string, text: string, p
 }
 
 export async function initSchema() {
-  // Instructor settings for cross-device persistence
-  await query(`CREATE TABLE IF NOT EXISTS instructor_settings (
+  // Serialize schema initialization to avoid concurrent DDL deadlocks
+  await query(`SELECT pg_advisory_lock(12345, hashtext('sqlgrader.init.v1'))`);
+  try {
+    // Instructor settings for cross-device persistence
+    await query(`CREATE TABLE IF NOT EXISTS instructor_settings (
     instructor_id UUID PRIMARY KEY REFERENCES instructors(id) ON DELETE CASCADE,
     course_name TEXT NOT NULL DEFAULT '',
     enrollment_code TEXT NOT NULL DEFAULT '',
@@ -75,23 +78,23 @@ export async function initSchema() {
     pass_threshold NUMERIC NOT NULL DEFAULT 0.6,
     grading_defaults JSONB
   );`);
-  // Migrate late_penalty to NUMERIC if needed
-  try {
-    await query('ALTER TABLE instructor_settings ALTER COLUMN late_penalty TYPE NUMERIC USING late_penalty::numeric;');
-    await query('ALTER TABLE instructor_settings ALTER COLUMN late_penalty SET DEFAULT 0.2;');
-  } catch (e) { /* ignore if already numeric */ }
-  // Fresh schema creation (no migrations)
-  await query(`CREATE EXTENSION IF NOT EXISTS pgcrypto;`);
+    // Migrate late_penalty to NUMERIC if needed
+    try {
+      await query('ALTER TABLE instructor_settings ALTER COLUMN late_penalty TYPE NUMERIC USING late_penalty::numeric;');
+      await query('ALTER TABLE instructor_settings ALTER COLUMN late_penalty SET DEFAULT 0.2;');
+    } catch (e) { /* ignore if already numeric */ }
+    // Fresh schema creation (no migrations)
+    await query(`CREATE EXTENSION IF NOT EXISTS pgcrypto;`);
 
-  // Instructors (owners / tenants)
-  await query(`CREATE TABLE IF NOT EXISTS instructors (
+    // Instructors (owners / tenants)
+    await query(`CREATE TABLE IF NOT EXISTS instructors (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     email TEXT NOT NULL UNIQUE,
     name TEXT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
   );`);
 
-  await query(`CREATE TABLE IF NOT EXISTS questions (
+    await query(`CREATE TABLE IF NOT EXISTS questions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     title TEXT NOT NULL,
     difficulty TEXT NOT NULL,
@@ -111,8 +114,8 @@ export async function initSchema() {
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
   );`);
 
-  // Reusable datasets containing init SQL that can be referenced by questions
-  await query(`CREATE TABLE IF NOT EXISTS datasets (
+    // Reusable datasets containing init SQL that can be referenced by questions
+    await query(`CREATE TABLE IF NOT EXISTS datasets (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       name TEXT NOT NULL UNIQUE,
       sql TEXT NOT NULL DEFAULT '',
@@ -121,7 +124,7 @@ export async function initSchema() {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );`);
 
-  await query(`CREATE TABLE IF NOT EXISTS assignments (
+    await query(`CREATE TABLE IF NOT EXISTS assignments (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     title TEXT NOT NULL,
     course TEXT NOT NULL,
@@ -135,9 +138,9 @@ export async function initSchema() {
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
   );`);
 
-  await query(`ALTER TABLE assignments ADD COLUMN IF NOT EXISTS published BOOLEAN NOT NULL DEFAULT false;`);
+    await query(`ALTER TABLE assignments ADD COLUMN IF NOT EXISTS published BOOLEAN NOT NULL DEFAULT false;`);
 
-  await query(`CREATE TABLE IF NOT EXISTS submissions (
+    await query(`CREATE TABLE IF NOT EXISTS submissions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     student TEXT NOT NULL,
     assignment TEXT NOT NULL,
@@ -148,29 +151,29 @@ export async function initSchema() {
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
   );`);
 
-  // Add stable foreign key to assignments and backfill
-  await query(`ALTER TABLE submissions ADD COLUMN IF NOT EXISTS assignment_id UUID REFERENCES assignments(id) ON DELETE CASCADE;`);
-  await query(`CREATE INDEX IF NOT EXISTS idx_submissions_assignment_id ON submissions(assignment_id);`);
-  // Backfill assignment_id using title + owner_id match
-  await query(`UPDATE submissions s
+    // Add stable foreign key to assignments and backfill
+    await query(`ALTER TABLE submissions ADD COLUMN IF NOT EXISTS assignment_id UUID REFERENCES assignments(id) ON DELETE CASCADE;`);
+    await query(`CREATE INDEX IF NOT EXISTS idx_submissions_assignment_id ON submissions(assignment_id);`);
+    // Backfill assignment_id using title + owner_id match
+    await query(`UPDATE submissions s
                SET assignment_id = a.id
                FROM assignments a
                WHERE s.assignment_id IS NULL
                  AND a.title = s.assignment
                  AND a.owner_id = s.owner_id;`);
 
-  // If no rows remain with NULL assignment_id, enforce NOT NULL constraint
-  try {
-    const { rows: nullCheck } = await query<{ count: string }>(`SELECT COUNT(*)::text as count FROM submissions WHERE assignment_id IS NULL`);
-    if (nullCheck[0] && nullCheck[0].count === '0') {
-      await query(`ALTER TABLE submissions ALTER COLUMN assignment_id SET NOT NULL`);
+    // If no rows remain with NULL assignment_id, enforce NOT NULL constraint
+    try {
+      const { rows: nullCheck } = await query<{ count: string }>(`SELECT COUNT(*)::text as count FROM submissions WHERE assignment_id IS NULL`);
+      if (nullCheck[0] && nullCheck[0].count === '0') {
+        await query(`ALTER TABLE submissions ALTER COLUMN assignment_id SET NOT NULL`);
+      }
+    } catch (e) {
+      // ignore errors here to keep init idempotent
     }
-  } catch (e) {
-    // ignore errors here to keep init idempotent
-  }
 
-  // New join table for linking questions to assignments (quizzes)
-  await query(`CREATE TABLE IF NOT EXISTS assignment_questions (
+    // New join table for linking questions to assignments (quizzes)
+    await query(`CREATE TABLE IF NOT EXISTS assignment_questions (
       assignment_id UUID REFERENCES assignments(id) ON DELETE CASCADE,
       question_id UUID REFERENCES questions(id) ON DELETE CASCADE,
       position INT NOT NULL DEFAULT 0,
@@ -180,7 +183,7 @@ export async function initSchema() {
       PRIMARY KEY (assignment_id, question_id)
     );`);
 
-  await query(`CREATE TABLE IF NOT EXISTS question_submissions (
+    await query(`CREATE TABLE IF NOT EXISTS question_submissions (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       submission_id UUID REFERENCES submissions(id) ON DELETE CASCADE,
       assignment_id UUID REFERENCES assignments(id) ON DELETE CASCADE,
@@ -197,8 +200,8 @@ export async function initSchema() {
       UNIQUE (submission_id, question_id)
     );`);
 
-  // per-attempt history table (immutable entries per auto-grade run)
-  await query(`CREATE TABLE IF NOT EXISTS question_submission_attempts (
+    // per-attempt history table (immutable entries per auto-grade run)
+    await query(`CREATE TABLE IF NOT EXISTS question_submission_attempts (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       question_submission_id UUID NULL REFERENCES question_submissions(id) ON DELETE CASCADE,
       submission_id UUID REFERENCES submissions(id) ON DELETE CASCADE,
@@ -215,11 +218,11 @@ export async function initSchema() {
       owner_id UUID REFERENCES instructors(id) ON DELETE CASCADE,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );`);
-  // Backfill new columns for existing deployments (idempotent)
-  await query(`ALTER TABLE question_submission_attempts ADD COLUMN IF NOT EXISTS manual BOOLEAN NOT NULL DEFAULT false;`);
+    // Backfill new columns for existing deployments (idempotent)
+    await query(`ALTER TABLE question_submission_attempts ADD COLUMN IF NOT EXISTS manual BOOLEAN NOT NULL DEFAULT false;`);
 
-  // Review requests (students can flag a graded question for re-evaluation)
-  await query(`CREATE TABLE IF NOT EXISTS question_review_requests (
+    // Review requests (students can flag a graded question for re-evaluation)
+    await query(`CREATE TABLE IF NOT EXISTS question_review_requests (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       assignment_id UUID REFERENCES assignments(id) ON DELETE CASCADE,
       question_id UUID REFERENCES questions(id) ON DELETE CASCADE,
@@ -234,11 +237,11 @@ export async function initSchema() {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
       UNIQUE(assignment_id, question_id, submission_id, student, owner_id)
     );`);
-  await query(`ALTER TABLE question_review_requests ADD COLUMN IF NOT EXISTS instructor_reply TEXT NULL;`);
-  await query(`ALTER TABLE question_review_requests ADD COLUMN IF NOT EXISTS reply_at TIMESTAMPTZ NULL;`);
+    await query(`ALTER TABLE question_review_requests ADD COLUMN IF NOT EXISTS instructor_reply TEXT NULL;`);
+    await query(`ALTER TABLE question_review_requests ADD COLUMN IF NOT EXISTS reply_at TIMESTAMPTZ NULL;`);
 
-  // Threaded messaging for review requests
-  await query(`CREATE TABLE IF NOT EXISTS question_review_request_messages (
+    // Threaded messaging for review requests
+    await query(`CREATE TABLE IF NOT EXISTS question_review_request_messages (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       request_id UUID REFERENCES question_review_requests(id) ON DELETE CASCADE,
       sender_role TEXT NOT NULL, -- 'student' | 'instructor'
@@ -247,11 +250,11 @@ export async function initSchema() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
       owner_id UUID REFERENCES instructors(id) ON DELETE CASCADE
   );`);
-  await query(`CREATE INDEX IF NOT EXISTS idx_qrrm_request ON question_review_request_messages(request_id);`);
-  await query(`CREATE INDEX IF NOT EXISTS idx_qrrm_owner ON question_review_request_messages(owner_id);`);
+    await query(`CREATE INDEX IF NOT EXISTS idx_qrrm_request ON question_review_request_messages(request_id);`);
+    await query(`CREATE INDEX IF NOT EXISTS idx_qrrm_owner ON question_review_request_messages(owner_id);`);
 
-  // Post-quiz micro-survey (one row per student per assignment)
-  await query(`CREATE TABLE IF NOT EXISTS assignment_feedback_survey (
+    // Post-quiz micro-survey (one row per student per assignment)
+    await query(`CREATE TABLE IF NOT EXISTS assignment_feedback_survey (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       assignment_id UUID REFERENCES assignments(id) ON DELETE CASCADE,
       student TEXT NOT NULL,
@@ -267,11 +270,11 @@ export async function initSchema() {
       UNIQUE(assignment_id, student, owner_id)
     );`);
 
-  // Instructor must be created via signup
-  const defaultInstructorId: string | null = null;
+    // Instructor must be created via signup
+    const defaultInstructorId: string | null = null;
 
-  // Class roster per instructor
-  await query(`CREATE TABLE IF NOT EXISTS roster (
+    // Class roster per instructor
+    await query(`CREATE TABLE IF NOT EXISTS roster (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     owner_id UUID REFERENCES instructors(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
@@ -281,11 +284,11 @@ export async function initSchema() {
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE(owner_id, email)
   );`);
-  // Backfill new evaluator column for existing deployments
-  await query(`ALTER TABLE roster ADD COLUMN IF NOT EXISTS evaluator BOOLEAN NOT NULL DEFAULT false;`);
+    // Backfill new evaluator column for existing deployments
+    await query(`ALTER TABLE roster ADD COLUMN IF NOT EXISTS evaluator BOOLEAN NOT NULL DEFAULT false;`);
 
-  // Invite tokens for students to join a class roster
-  await query(`CREATE TABLE IF NOT EXISTS invites (
+    // Invite tokens for students to join a class roster
+    await query(`CREATE TABLE IF NOT EXISTS invites (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     owner_id UUID REFERENCES instructors(id) ON DELETE CASCADE,
     roster_id UUID REFERENCES roster(id) ON DELETE CASCADE,
@@ -297,55 +300,59 @@ export async function initSchema() {
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
   );`);
 
-  // Student secrets: password per roster entry (scoped to instructor via owner_id on roster)
-  await query(`CREATE TABLE IF NOT EXISTS student_secrets (
+    // Student secrets: password per roster entry (scoped to instructor via owner_id on roster)
+    await query(`CREATE TABLE IF NOT EXISTS student_secrets (
     roster_id UUID PRIMARY KEY REFERENCES roster(id) ON DELETE CASCADE,
     password TEXT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
   );`);
-  await query(`CREATE INDEX IF NOT EXISTS idx_roster_owner_email ON roster(owner_id, email);`);
+    await query(`CREATE INDEX IF NOT EXISTS idx_roster_owner_email ON roster(owner_id, email);`);
 
 
-  // Indexes for tenant isolation performance
-  await query(`CREATE INDEX IF NOT EXISTS idx_questions_owner ON questions(owner_id);`);
-  await query(`CREATE INDEX IF NOT EXISTS idx_assignments_owner ON assignments(owner_id);`);
-  await query(`CREATE INDEX IF NOT EXISTS idx_datasets_owner ON datasets(owner_id);`);
-  await query(`CREATE INDEX IF NOT EXISTS idx_submissions_owner ON submissions(owner_id);`);
-  await query(`CREATE INDEX IF NOT EXISTS idx_assignment_questions_owner ON assignment_questions(owner_id);`);
-  await query(`CREATE INDEX IF NOT EXISTS idx_question_submissions_owner ON question_submissions(owner_id);`);
-  await query(`CREATE INDEX IF NOT EXISTS idx_question_submission_attempts_owner ON question_submission_attempts(owner_id);`);
-  await query(`CREATE INDEX IF NOT EXISTS idx_roster_owner ON roster(owner_id);`);
-  await query(`CREATE INDEX IF NOT EXISTS idx_invites_owner ON invites(owner_id);`);
-  await query(`CREATE INDEX IF NOT EXISTS idx_invites_token ON invites(token);`);
-  await query(`CREATE INDEX IF NOT EXISTS idx_review_requests_owner ON question_review_requests(owner_id);`);
+    // Indexes for tenant isolation performance
+    await query(`CREATE INDEX IF NOT EXISTS idx_questions_owner ON questions(owner_id);`);
+    await query(`CREATE INDEX IF NOT EXISTS idx_assignments_owner ON assignments(owner_id);`);
+    await query(`CREATE INDEX IF NOT EXISTS idx_datasets_owner ON datasets(owner_id);`);
+    await query(`CREATE INDEX IF NOT EXISTS idx_submissions_owner ON submissions(owner_id);`);
+    await query(`CREATE INDEX IF NOT EXISTS idx_assignment_questions_owner ON assignment_questions(owner_id);`);
+    await query(`CREATE INDEX IF NOT EXISTS idx_question_submissions_owner ON question_submissions(owner_id);`);
+    await query(`CREATE INDEX IF NOT EXISTS idx_question_submission_attempts_owner ON question_submission_attempts(owner_id);`);
+    await query(`CREATE INDEX IF NOT EXISTS idx_roster_owner ON roster(owner_id);`);
+    await query(`CREATE INDEX IF NOT EXISTS idx_invites_owner ON invites(owner_id);`);
+    await query(`CREATE INDEX IF NOT EXISTS idx_invites_token ON invites(token);`);
+    await query(`CREATE INDEX IF NOT EXISTS idx_review_requests_owner ON question_review_requests(owner_id);`);
 
-  // Enable Row Level Security and policies (idempotent)
-  const tables = ['questions', 'datasets', 'assignments', 'submissions', 'assignment_questions', 'question_submissions', 'question_submission_attempts', 'roster', 'question_review_requests'];
-  for (const t of tables) {
-    await query(`ALTER TABLE ${t} ENABLE ROW LEVEL SECURITY;`).catch(() => { });
-    // Replace unsupported IF NOT EXISTS with explicit drop/create (idempotent)
-    await query(`DROP POLICY IF EXISTS ${t}_select_owner ON ${t};`).catch(() => { });
-    await query(`CREATE POLICY ${t}_select_owner ON ${t} FOR SELECT USING (owner_id = current_setting('app.current_instructor', true)::uuid);`).catch(() => { });
-    await query(`DROP POLICY IF EXISTS ${t}_mod_owner ON ${t};`).catch(() => { });
-    await query(`CREATE POLICY ${t}_mod_owner ON ${t} FOR ALL USING (owner_id = current_setting('app.current_instructor', true)::uuid) WITH CHECK (owner_id = current_setting('app.current_instructor', true)::uuid);`).catch(() => { });
-  }
+    // Enable Row Level Security and policies (idempotent)
+    const tables = ['questions', 'datasets', 'assignments', 'submissions', 'assignment_questions', 'question_submissions', 'question_submission_attempts', 'roster', 'question_review_requests'];
+    for (const t of tables) {
+      await query(`ALTER TABLE ${t} ENABLE ROW LEVEL SECURITY;`).catch(() => { });
+      // Replace unsupported IF NOT EXISTS with explicit drop/create (idempotent)
+      await query(`DROP POLICY IF EXISTS ${t}_select_owner ON ${t};`).catch(() => { });
+      await query(`CREATE POLICY ${t}_select_owner ON ${t} FOR SELECT USING (owner_id = current_setting('app.current_instructor', true)::uuid);`).catch(() => { });
+      await query(`DROP POLICY IF EXISTS ${t}_mod_owner ON ${t};`).catch(() => { });
+      await query(`CREATE POLICY ${t}_mod_owner ON ${t} FOR ALL USING (owner_id = current_setting('app.current_instructor', true)::uuid) WITH CHECK (owner_id = current_setting('app.current_instructor', true)::uuid);`).catch(() => { });
+    }
 
-  // Seed demo data once (simple check by counting assignments & submissions)
-  const { rows: aCount } = await query<{ count: string }>(`SELECT COUNT(*)::text as count FROM assignments;`);
-  if (Number(aCount[0].count) === 0) {
-    if (defaultInstructorId) {
-      await query(`INSERT INTO assignments (title, course, difficulty, points, due, tags, owner_id) VALUES
+    // Seed demo data once (simple check by counting assignments & submissions)
+    const { rows: aCount } = await query<{ count: string }>(`SELECT COUNT(*)::text as count FROM assignments;`);
+    if (Number(aCount[0].count) === 0) {
+      if (defaultInstructorId) {
+        await query(`INSERT INTO assignments (title, course, difficulty, points, due, tags, owner_id) VALUES
         ('Basic SELECT & WHERE', 'DB101 — Intro to SQL', 'Beginner', 10, '2025-09-05', ARRAY['SELECT','WHERE','FILTERS'], $1),
         ('JOINs & Aggregates', 'DB201 — Intermediate SQL', 'Intermediate', 20, '2025-09-12', ARRAY['JOIN','GROUP BY','HAVING'], $1);`, [defaultInstructorId]);
+      }
     }
-  }
-  const { rows: sCount } = await query<{ count: string }>(`SELECT COUNT(*)::text as count FROM submissions;`);
-  if (Number(sCount[0].count) === 0) {
-    if (defaultInstructorId) {
-      await query(`INSERT INTO submissions (student, assignment, date, grade, status, owner_id) VALUES
+    const { rows: sCount } = await query<{ count: string }>(`SELECT COUNT(*)::text as count FROM submissions;`);
+    if (Number(sCount[0].count) === 0) {
+      if (defaultInstructorId) {
+        await query(`INSERT INTO submissions (student, assignment, date, grade, status, owner_id) VALUES
         ('A. Janssen', 'Basic SELECT & WHERE', '2025-08-28 16:02', 8.5, 'Auto-graded', $1),
         ('M. de Vries', 'JOINs & Aggregates', '2025-08-27 10:41', 6.0, 'Needs review', $1);`, [defaultInstructorId]);
+      }
     }
+  } finally {
+    // Always release the advisory lock
+    await query(`SELECT pg_advisory_unlock(12345, hashtext('sqlgrader.init.v1'))`).catch(() => { });
   }
 }
 

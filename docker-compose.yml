@@ -31,7 +31,7 @@ services:
       - keycloak_data:/opt/keycloak/data
       - ./keycloak/realm-export:/opt/keycloak/data/import:ro
     healthcheck:
-      test: [ "CMD", "bash", "-lc", "curl -fsS http://localhost:8080/realms/master/.well-known/openid-configuration >/dev/null" ]
+      test: [ "CMD", "bash", "-lc", "exec 3<>/dev/tcp/localhost/8080 && printf 'GET /health/ready HTTP/1.0\r Host: localhost\r \r ' >&3; IFS= read -r line <&3; [[ $line = *\"200\"* ]]" ]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -79,17 +79,17 @@ services:
       - PGPASSWORD=${POSTGRES_PASSWORD}
       - PGDATABASE=grader
     healthcheck:
-      test: [ "CMD", "curl", "-fsS", "http://localhost:5000/health" ]
+      test: [ "CMD", "bash", "-lc", "exec 3<>/dev/tcp/localhost/5000 && printf 'GET /health HTTP/1.0\rHost: localhost\r\r ' >&3; IFS= read -r line <&3; [[ $line = *\"200\"* ]]" ]
       interval: 10s
       timeout: 5s
       retries: 5
 
   frontend:
-    image: ${FRONTEND_IMAGE:-ghcr.io/berniegach/socoles-frontend:1.0.6}
+    image: ${FRONTEND_IMAGE:-ghcr.io/berniegach/socoles-frontend:1.0.7}
     # Uncomment to build locally instead of pulling
-    # build:
-    #   context: ./frontend
-    #   dockerfile: Dockerfile
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
     depends_on:
       - backend
       - keycloak
