@@ -390,7 +390,8 @@ export default function StudentAssignmentPlayer({ assignmentId, onClose, onSubmi
                 }
             };
             try {
-                const resp = await fetchWithTimeout(`${process.env.NEXT_PUBLIC_SOCOLES_API_URL || 'http://localhost:5000'}${process.env.NEXT_PUBLIC_SOCOLES_GRADE_PATH || '/grade-queries'}`, {
+                // Use same-origin API proxy to avoid CORS/mixed-content issues in Docker deployments
+                const resp = await fetchWithTimeout(`/api/autograde`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload),

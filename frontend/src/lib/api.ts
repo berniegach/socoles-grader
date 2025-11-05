@@ -127,7 +127,8 @@ export async function sendBatchToSocoles({ studentsFile, referencesFile, initSql
         use_postgresql: !!mergedOptions.use_postgresql,
     };
 
-    const resp = await fetch(`${API_BASE}${GRADE_PATH}`, {
+    // Use same-origin proxy to avoid CORS/mixed-content issues in Docker/HTTPS deployments
+    const resp = await fetch(`/api/autograde`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
