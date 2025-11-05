@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 // Server-side proxy that forwards autograder requests to the backend using the Docker internal network.
 export async function POST(req: NextRequest) {
     try {
-        const base = process.env.SOCOLES_INTERNAL_API_URL || 'http://backend:5000';
+        const base = process.env.SOCOLES_INTERNAL_API_URL || 'http://localhost:5000';
         const path = process.env.NEXT_PUBLIC_SOCOLES_GRADE_PATH || '/grade-queries';
         const url = `${base}${path}`;
         const payload = await req.json();

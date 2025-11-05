@@ -92,7 +92,7 @@ export default function StudentAssignmentPlayer({ assignmentId, onClose, onSubmi
         if (creatingSubmissionRef.current) return submission;
         creatingSubmissionRef.current = true;
         try {
-            const sRes = await authFetch('/api/submissions');
+            const sRes = await authFetch('/api/submissions?scope=mine');
             if (sRes.ok) {
                 const all = await sRes.json();
                 const mine = (all || []).filter((s: any) => s.student === user.name && s.assignmentId === assignment.id);
@@ -156,7 +156,7 @@ export default function StudentAssignmentPlayer({ assignmentId, onClose, onSubmi
         async function checkLock() {
             if (!assignment || !user?.token) return;
             try {
-                const sRes = await authFetch('/api/submissions');
+                const sRes = await authFetch('/api/submissions?scope=mine');
                 if (!sRes.ok) return; const all = await sRes.json();
                 const existing = (all || []).find((s: any) => s.student === user.name && s.assignmentId === assignment.id && (s.status === 'Submitted' || s.status === 'Auto-graded' || s.status === 'Needs review'));
                 if (existing) {
@@ -176,7 +176,7 @@ export default function StudentAssignmentPlayer({ assignmentId, onClose, onSubmi
             if (!assignment || !user?.token || submission || creatingSubmissionRef.current) return;
             creatingSubmissionRef.current = true;
             try {
-                const sRes = await authFetch('/api/submissions');
+                const sRes = await authFetch('/api/submissions?scope=mine');
                 if (sRes.ok) {
                     const all = await sRes.json();
                     const mine = (all || []).filter((s: any) => s.student === user.name && s.assignmentId === assignment.id);

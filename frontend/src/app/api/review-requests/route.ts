@@ -64,19 +64,21 @@ export async function POST(req: NextRequest) {
         if (!payload) return NextResponse.json({ error: 'invalid token' }, { status: 401 });
         const body = await req.json();
         const { assignmentId, questionId, submissionId, student, comment } = body || {};
-        if (!assignmentId || !questionId || !submissionId || !student || !comment) return NextResponse.json({ error: 'assignmentId, questionId, submissionId, student, comment required' }, { status: 400 });
+        if (!assignmentId || !questionId || !submissionId || !comment) return NextResponse.json({ error: 'assignmentId, questionId, submissionId, comment required' }, { status: 400 });
         const instructorId = payload.role === 'student' ? (payload.instructorId as string) : payload.sub;
         return await withInstructorContext(instructorId, async () => {
+            const effectiveStudent = payload.role === 'student' ? payload.email : (student || '');
+            if (!effectiveStudent) return NextResponse.json({ error: 'student required' }, { status: 400 });
             const { rows } = await query(`INSERT INTO question_review_requests (assignment_id, question_id, submission_id, student, comment, owner_id)
         VALUES ($1,$2,$3,$4,$5,current_setting('app.current_instructor')::uuid)
         ON CONFLICT (assignment_id, question_id, submission_id, student, owner_id)
         DO UPDATE SET comment=EXCLUDED.comment, status='Pending', updated_at=now(), instructor_reply=NULL, reply_at=NULL
-        RETURNING id, assignment_id as "assignmentId", question_id as "questionId", submission_id as "submissionId", student, comment, status, instructor_reply as "instructorReply", to_char(reply_at,'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as "replyAt", to_char(created_at,'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as "createdAt", to_char(updated_at,'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as "updatedAt"`, [assignmentId, questionId, submissionId, student, String(comment).slice(0, 2000)]);
+        RETURNING id, assignment_id as "assignmentId", question_id as "questionId", submission_id as "submissionId", student, comment, status, instructor_reply as "instructorReply", to_char(reply_at,'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as "replyAt", to_char(created_at,'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as "createdAt", to_char(updated_at,'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as "updatedAt"`, [assignmentId, questionId, submissionId, effectiveStudent, String(comment).slice(0, 2000)]);
             const reqRow = rows[0];
             if (reqRow) {
                 // Insert initial message (student)
                 await query(`INSERT INTO question_review_request_messages (request_id, sender_role, sender, message, owner_id)
-                    VALUES ($1,'student',$2,$3,current_setting('app.current_instructor')::uuid)`, [reqRow.id, student, String(comment).slice(0, 4000)]);
+                    VALUES ($1,'student',$2,$3,current_setting('app.current_instructor')::uuid)`, [reqRow.id, effectiveStudent, String(comment).slice(0, 4000)]);
             }
             return NextResponse.json(reqRow);
         });

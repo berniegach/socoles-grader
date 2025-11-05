@@ -75,22 +75,24 @@ export async function POST(req: NextRequest) {
         if (!payload) return NextResponse.json({ error: 'invalid token' }, { status: 401 });
         const body = await req.json();
         const { submissionId, assignmentId, questionId, student, sql, grade, status, rubric, feedback, incrementAttempt, noAttemptIncrement } = body || {};
-        if (!submissionId || !assignmentId || !questionId || !student) return NextResponse.json({ error: 'submissionId, assignmentId, questionId, student required' }, { status: 400 });
+        if (!submissionId || !assignmentId || !questionId) return NextResponse.json({ error: 'submissionId, assignmentId, questionId required' }, { status: 400 });
         // Only increment attempts when explicitly requested by the caller.
         // Back-compat: treat noAttemptIncrement === false as a signal to increment.
         const shouldIncrement = incrementAttempt === true || noAttemptIncrement === false;
         const instructorId = payload.role === 'student' ? (payload.instructorId as string) : payload.sub;
         return await withInstructorContext(instructorId, async () => {
+            const effectiveStudent = payload.role === 'student' ? payload.email : (student || '');
+            if (!effectiveStudent) return NextResponse.json({ error: 'student required' }, { status: 400 });
             const { rows } = await query(`INSERT INTO question_submissions (submission_id, assignment_id, question_id, student, sql, grade, status, rubric, feedback, attempt, owner_id)
                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,COALESCE((SELECT attempt FROM question_submissions WHERE submission_id=$1 AND question_id=$3 LIMIT 1), 0), current_setting('app.current_instructor')::uuid)
                 ON CONFLICT (submission_id, question_id)
                 DO UPDATE SET sql=EXCLUDED.sql, grade=EXCLUDED.grade, status=EXCLUDED.status, rubric=EXCLUDED.rubric, feedback=EXCLUDED.feedback
-                RETURNING id, submission_id as "submissionId", assignment_id as "assignmentId", question_id as "questionId", student, sql, grade::float8 as grade, status, rubric, feedback, attempt`, [submissionId, assignmentId, questionId, student, sql || '', grade ?? null, status || 'Pending', rubric || null, Array.isArray(feedback) ? feedback : []]);
+                RETURNING id, submission_id as "submissionId", assignment_id as "assignmentId", question_id as "questionId", student, sql, grade::float8 as grade, status, rubric, feedback, attempt`, [submissionId, assignmentId, questionId, effectiveStudent, sql || '', grade ?? null, status || 'Pending', rubric || null, Array.isArray(feedback) ? feedback : []]);
             let qs = rows[0];
             if (shouldIncrement) {
                 const nextAttempt = await getNextAttempt(qs.id);
                 await query(`INSERT INTO question_submission_attempts (question_submission_id, submission_id, assignment_id, question_id, student, sql, grade, status, rubric, feedback, manual, attempt, owner_id)
-                    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,($8='Manual'),$11,current_setting('app.current_instructor')::uuid)`, [qs.id, submissionId, assignmentId, questionId, student, sql || '', grade ?? null, status || 'Auto-graded', rubric || null, Array.isArray(feedback) ? feedback : [], nextAttempt]);
+                    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,($8='Manual'),$11,current_setting('app.current_instructor')::uuid)`, [qs.id, submissionId, assignmentId, questionId, effectiveStudent, sql || '', grade ?? null, status || 'Auto-graded', rubric || null, Array.isArray(feedback) ? feedback : [], nextAttempt]);
                 const upd = await query(`UPDATE question_submissions SET attempt=$2 WHERE id=$1 RETURNING id, submission_id as "submissionId", assignment_id as "assignmentId", question_id as "QuestionId", student, sql, grade::float8 as grade, status, rubric, feedback, attempt`, [qs.id, nextAttempt]);
                 qs = upd.rows[0] || qs;
             }
@@ -119,10 +121,11 @@ export async function PATCH(req: NextRequest) {
             const shouldIncrement = incrementAttempt === true || noAttemptIncrement === false;
             if (shouldIncrement) {
                 const nextAttempt = await getNextAttempt(id);
+                const effectiveStudent = payload.role === 'student' ? payload.email : null;
                 await query(`INSERT INTO question_submission_attempts (question_submission_id, submission_id, assignment_id, question_id, student, sql, grade, status, rubric, feedback, manual, attempt, owner_id)
-                    SELECT $1, submission_id, assignment_id, question_id, student, sql, $2, $3, $4, $5, ($3='Manual'), $6, current_setting('app.current_instructor')::uuid
-                    FROM question_submissions WHERE id=$1`, [id, grade ?? null, status || 'Auto-graded', rubric || null, Array.isArray(feedback) ? feedback : [], nextAttempt]);
-                const upd = await query(`UPDATE question_submissions SET attempt=$2 WHERE id=$1 RETURNING id, submission_id as "submissionId", assignment_id as "assignmentId", question_id as "questionId", student, sql, grade::float8 as grade, status, rubric, feedback, attempt`, [id, nextAttempt]);
+                    SELECT $1, submission_id, assignment_id, question_id, COALESCE($7, student), sql, $2, $3, $4, $5, ($3='Manual'), $6, current_setting('app.current_instructor')::uuid
+                    FROM question_submissions WHERE id=$1`, [id, grade ?? null, status || 'Auto-graded', rubric || null, Array.isArray(feedback) ? feedback : [], nextAttempt, effectiveStudent]);
+                const upd = await query(`UPDATE question_submissions SET attempt=$2, student=COALESCE($3, student) WHERE id=$1 RETURNING id, submission_id as "submissionId", assignment_id as "assignmentId", question_id as "questionId", student, sql, grade::float8 as grade, status, rubric, feedback, attempt`, [id, nextAttempt, effectiveStudent]);
                 qs = upd.rows[0] || qs;
             }
             return NextResponse.json(qs);

@@ -86,7 +86,7 @@ export default function StudentSubmissionReview({ assignmentId, onClose }: Revie
             try {
                 // fetch latest question_submission to derive id history (reuse API pattern from player)
                 // First need submission list to identify submission for this assignment
-                const subs = await authFetch('/api/submissions');
+                const subs = await authFetch('/api/submissions?scope=mine');
                 let submissionId: string | null = null;
                 if (subs.ok) {
                     const list = await subs.json();
@@ -118,7 +118,7 @@ export default function StudentSubmissionReview({ assignmentId, onClose }: Revie
         if (!assignment?.id || !user?.token) return;
         (async () => {
             try {
-                const subs = await authFetch('/api/submissions');
+                const subs = await authFetch('/api/submissions?scope=mine');
                 if (subs.ok) {
                     const list = await subs.json();
                     const mine = (list || []).filter((s: any) => s.student === user?.name && s.assignmentId === assignment.id);

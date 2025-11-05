@@ -1,13 +1,24 @@
 "use client";
-import { use, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Box, Card, CardContent, CardHeader, TextField, Button, Alert, LinearProgress, Typography, Stack } from '@mui/material';
 import KeyIcon from '@mui/icons-material/VpnKey';
 import { signIn } from 'next-auth/react';
 import { useAuth } from '@/features/auth/AuthProvider';
 
-export default function InviteAcceptPage({ params }: { params: Promise<{ token: string }> }) {
-    const { token } = use(params);
+export default function InviteAcceptPage({ params }: any) {
+    const [token, setToken] = useState<string>('');
+    // Support both Promise-style params and plain object params to satisfy local typing
+    useEffect(() => {
+        let cancelled = false;
+        const p: any = params;
+        if (p && typeof p.then === 'function') {
+            p.then((v: any) => { if (!cancelled) setToken(v?.token || ''); }).catch(() => { if (!cancelled) setToken(''); });
+        } else {
+            setToken((p && typeof p === 'object' ? p.token : '') || '');
+        }
+        return () => { cancelled = true; };
+    }, [params]);
     const router = useRouter();
     const [name, setName] = useState('');
     const [email, setEmail] = useState('');

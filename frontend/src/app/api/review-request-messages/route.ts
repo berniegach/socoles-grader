@@ -89,7 +89,7 @@ export async function POST(req: NextRequest) {
                 );
                 if (me.length && me[0].evaluator) senderRole = 'instructor';
             }
-            const sender = payload.name || payload.sub;
+            const sender = payload.role === 'student' ? (payload.email || payload.name || payload.sub) : (payload.name || payload.sub);
             const { rows } = await query(`INSERT INTO question_review_request_messages (request_id, sender_role, sender, message, owner_id) VALUES ($1,$2,$3,$4,current_setting('app.current_instructor')::uuid) RETURNING id, request_id as "requestId", sender_role as "senderRole", sender, message, to_char(created_at,'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as "createdAt"`, [requestId, senderRole, String(sender), String(message).slice(0, 4000)]);
             return NextResponse.json(rows[0]);
         });

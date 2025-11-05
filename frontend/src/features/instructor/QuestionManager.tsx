@@ -46,7 +46,7 @@ import DoneIcon from '@mui/icons-material/Done';
 import AddIcon from '@mui/icons-material/Add';
 import type { Question, NewQuestionPayload } from '@/lib/types';
 import type { Assignment } from '@/lib/types';
-import { DEFAULT_GRADING_OPTIONS, API_BASE, GRADE_PATH } from '@/lib/api';
+import { DEFAULT_GRADING_OPTIONS } from '@/lib/api';
 import type { GradingOptions as GradingOptionsType } from '@/lib/types';
 import GradingOptions from '@/features/instructor/GradingOptions';
 import { useTheme } from '@mui/material/styles';
@@ -306,7 +306,14 @@ export default function QuestionManager() {
                 dbname: opts.dbName || '',
                 use_postgresql: !!opts.use_postgresql,
             };
-            const resp = await fetch(`${API_BASE}${GRADE_PATH}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+            // Use same-origin proxy to the autograder (avoids CORS/mixed-content issues)
+            const fetchWithTimeout = async (url: string, options: RequestInit, timeoutMs: number) => {
+                const controller = new AbortController();
+                const timer = setTimeout(() => controller.abort(), timeoutMs);
+                try { return await fetch(url, { ...options, signal: controller.signal }); }
+                finally { clearTimeout(timer); }
+            };
+            const resp = await fetchWithTimeout('/api/autograde', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }, 20000);
             if (!resp.ok) throw new Error(`Autograder error ${resp.status}`);
             let data: unknown = null;
             try { data = await resp.json(); } catch { /* ignore */ }

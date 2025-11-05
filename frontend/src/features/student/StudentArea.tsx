@@ -171,7 +171,7 @@ export default function StudentArea({ active }: { active: string }) {
         try {
             const [aRes, sRes, fRes] = await Promise.all([
                 authFetch('/api/assignments?include=questions'),
-                authFetch('/api/submissions'),
+                authFetch('/api/submissions?scope=mine'),
                 authFetch('/api/feedback')
             ]);
             const aData = aRes.ok ? await aRes.json() : [];
@@ -391,7 +391,7 @@ export default function StudentArea({ active }: { active: string }) {
     async function refreshSubmissions() {
         if (!user?.token) return;
         try {
-            const res = await authFetch('/api/submissions');
+            const res = await authFetch('/api/submissions?scope=mine');
             const data = await res.json();
             setSubmissions(Array.isArray(data) ? data : []);
         } catch { /* ignore */ }
