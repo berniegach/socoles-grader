@@ -90,7 +90,7 @@ export default function StudentSubmissionReview({ assignmentId, onClose }: Revie
                 let submissionId: string | null = null;
                 if (subs.ok) {
                     const list = await subs.json();
-                    const mine = (list || []).filter((s: any) => s.student === user?.name && s.assignmentId === assignment?.id);
+                    const mine = (list || []).filter((s: any) => s.assignmentId === assignment?.id);
                     const final = mine.find((s: any) => ['Submitted', 'Auto-graded', 'Needs review'].includes(s.status));
                     submissionId = final?.id || null;
                 }
@@ -121,7 +121,7 @@ export default function StudentSubmissionReview({ assignmentId, onClose }: Revie
                 const subs = await authFetch('/api/submissions?scope=mine');
                 if (subs.ok) {
                     const list = await subs.json();
-                    const mine = (list || []).filter((s: any) => s.student === user?.name && s.assignmentId === assignment.id);
+                    const mine = (list || []).filter((s: any) => s.assignmentId === assignment.id);
                     const final = mine.find((s: any) => ['Submitted', 'Auto-graded', 'Needs review'].includes(s.status));
                     if (final?.id) setSubmissionId(final.id);
                 }
@@ -133,7 +133,7 @@ export default function StudentSubmissionReview({ assignmentId, onClose }: Revie
         if (!submissionId || !assignment?.id || !user?.token) return;
         (async () => {
             try {
-                const res = await authFetch(`/api/review-requests?assignmentId=${assignment.id}&submissionId=${submissionId}&student=${encodeURIComponent(user?.name || '')}`);
+                const res = await authFetch(`/api/review-requests?assignmentId=${assignment.id}&submissionId=${submissionId}&scope=mine`);
                 if (res.ok) {
                     const arr = await res.json();
                     const map: Record<string, { id: string; comment: string; status: string; instructorReply?: string | null; replyAt?: string | null }> = {};
@@ -142,7 +142,7 @@ export default function StudentSubmissionReview({ assignmentId, onClose }: Revie
                 }
             } catch { /* ignore */ }
         })();
-    }, [submissionId, assignment?.id, user?.token, user?.name, authFetch]);
+    }, [submissionId, assignment?.id, user?.token, authFetch]);
 
     // Load messages when requestForCurrent changes
     useEffect(() => {
@@ -332,9 +332,9 @@ export default function StudentSubmissionReview({ assignmentId, onClose }: Revie
                         <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, mt: 2 }}>
                             <Button size='small' onClick={() => setReviewDialogOpen(false)}>Cancel</Button>
                             <Button size='small' variant='contained' disabled={!reviewComment.trim()} onClick={async () => {
-                                if (!assignment?.id || !currentQuestion?.id || !submissionId || !user?.name) return;
+                                if (!assignment?.id || !currentQuestion?.id || !submissionId) return;
                                 try {
-                                    const res = await authFetch('/api/review-requests', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ assignmentId: assignment.id, questionId: currentQuestion.id, submissionId, student: user.name, comment: reviewComment.trim() }) });
+                                    const res = await authFetch('/api/review-requests', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ assignmentId: assignment.id, questionId: currentQuestion.id, submissionId, comment: reviewComment.trim() }) });
                                     if (res.ok) {
                                         const created = await res.json();
                                         setReviewRequests(m => ({ ...m, [currentQuestion.id]: { id: created.id, comment: created.comment, status: created.status, instructorReply: created.instructorReply, replyAt: created.replyAt } }));

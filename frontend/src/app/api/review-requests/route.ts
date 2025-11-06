@@ -17,6 +17,7 @@ export async function GET(req: NextRequest) {
         const questionId = searchParams.get('questionId');
         const submissionId = searchParams.get('submissionId');
         const student = searchParams.get('student');
+        const scope = (searchParams.get('scope') || '').toLowerCase();
         const instructorId = payload.role === 'student' ? (payload.instructorId as string) : payload.sub;
         return await withInstructorContext(instructorId, async () => {
             const clauses: string[] = [];
@@ -35,7 +36,8 @@ export async function GET(req: NextRequest) {
                     [meId]
                 );
                 const isTA = !!(me.length && me[0].evaluator);
-                if (!isTA) {
+                // If scope=mine, restrict even for evaluators (TAs) to only their own requests
+                if (scope === 'mine' || !isTA) {
                     // Non-evaluator students can only see their own requests (support id/name/email)
                     const allowed = [payload.sub, payload.name, payload.email].filter(Boolean);
                     params.push(allowed);

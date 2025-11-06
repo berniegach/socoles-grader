@@ -215,23 +215,21 @@ export default function StudentArea({ active }: { active: string }) {
     // Treat 'Submitted', 'Auto-graded', and 'Needs review' as finished
     const titleById = useMemo(() => new Map(assignments.map(a => [a.id, a.title])), [assignments]);
     const submittedTitles = useMemo(() => {
+        // API call already uses scope=mine; do not re-filter by local user identity (name/email)
         const set = new Set<string>();
-        const me = user?.name;
         (submissions || []).forEach((s) => {
-            if (s.student === me && (s.status === 'Submitted' || s.status === 'Auto-graded' || s.status === 'Needs review')) {
+            if (s.status === 'Submitted' || s.status === 'Auto-graded' || s.status === 'Needs review') { 
                 const t = titleById.get(s.assignmentId);
                 if (t) set.add(t);
             }
         });
         return set;
-    }, [submissions, user?.name, titleById]);
+    }, [submissions, titleById]);
 
     // Categorize assignments for dashboard
     const categorized = useMemo(() => {
-        const me = user?.name;
         const byTitle = new Map<string, SubmissionApi[]>();
         (submissions || []).forEach(s => {
-            if (s.student !== me) return;
             const t = titleById.get(s.assignmentId);
             if (!t) return;
             if (!byTitle.has(t)) byTitle.set(t, []);
@@ -259,11 +257,10 @@ export default function StudentArea({ active }: { active: string }) {
         const pending = assignments.filter(a => !finishedTitles.has(a.title) && !inProgressTitles.has(a.title) && !overdueTitles.has(a.title));
 
         return { finished, inProgress, overdue, pending, finishedTitles, inProgressTitles };
-    }, [assignments, submissions, user?.name]);
+    }, [assignments, submissions]);
 
     // Track which assignments are fully attempted (each question has at least one submission by student)
     const fullyAttempted = useMemo(() => {
-        const me = user?.name;
         const map = new Set<string>();
         assignments.forEach(a => {
             if (!a.questions || !a.questions.length) return; // no questions -> skip gating
@@ -271,7 +268,7 @@ export default function StudentArea({ active }: { active: string }) {
             let covered = 0;
             const seen = new Set<string>();
             submissions.forEach(s => {
-                if (s.student === me && s.assignmentId === a.id) {
+                if (s.assignmentId === a.id) {
                     // we need per-question submissions; rely on question_submissions endpoint when opening player for detailed stats
                     // As a lightweight proxy: if there is at least one submission for the assignment per question count threshold.
                     covered = needed; // fallback: treat as covered when any submission exists
@@ -280,7 +277,7 @@ export default function StudentArea({ active }: { active: string }) {
             if (covered >= needed) map.add(a.id);
         });
         return map;
-    }, [assignments, submissions, user?.name]);
+    }, [assignments, submissions]);
 
     // Auto-open survey only when finished, unsurveyed, fullyAttempted, and eligible
     useEffect(() => {

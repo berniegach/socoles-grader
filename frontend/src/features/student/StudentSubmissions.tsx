@@ -51,11 +51,11 @@ export default function StudentSubmissions({ rows = [] as any[], onRefresh, onOp
 
     // Fetch student's review requests to mark submissions under review (Pending only)
     useEffect(() => {
-        if (!user?.token || !user?.name) return;
+        if (!user?.token) return;
         let cancelled = false;
         (async () => {
             try {
-                const res = await authFetch(`/api/review-requests?student=${encodeURIComponent(user.name)}`);
+                const res = await authFetch(`/api/review-requests?scope=mine`);
                 if (!res.ok) return;
                 const data = await res.json();
                 const map: Record<string, boolean> = {};
@@ -66,7 +66,7 @@ export default function StudentSubmissions({ rows = [] as any[], onRefresh, onOp
             } catch { /* ignore */ }
         })();
         return () => { cancelled = true; };
-    }, [user?.token, user?.name, authFetch]);
+    }, [user?.token, authFetch]);
 
     const metaById = useMemo(() => {
         const map = new Map<string, any>();
