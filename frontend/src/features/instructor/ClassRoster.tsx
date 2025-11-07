@@ -11,7 +11,7 @@ import Papa from 'papaparse';
 import PageCard from '@/components/PageCard';
 import HeaderActions from '@/components/HeaderActions';
 import { useAuth } from '@/features/auth/AuthProvider';
-import type { RosterEntry } from '@/lib/types';
+import type { RosterEntry, InviteResponse } from '@/lib/types';
 
 export default function ClassRoster() {
     const { authFetch, user } = useAuth();
@@ -26,19 +26,45 @@ export default function ClassRoster() {
     // hidden file input ref for import CSV
     const inputRef = useRef<HTMLInputElement | null>(null);
     const [search, setSearch] = useState('');
+    const [showRemoved, setShowRemoved] = useState(false);
+    // Map rosterId -> latest invite (to surface expiry state)
+    const [invitesByRoster, setInvitesByRoster] = useState<Record<string, InviteResponse>>({});
 
     const rowsToShow = useMemo(() => {
         const q = search.trim().toLowerCase();
-        if (!q) return rows;
-        return rows.filter(r => (r.name || '').toLowerCase().includes(q) || (r.email || '').toLowerCase().includes(q));
-    }, [rows, search]);
+        // Optionally include Removed entries based on toggle
+        const base = showRemoved ? rows : rows.filter(r => r.status !== 'Removed');
+        if (!q) return base;
+        return base.filter(r => (r.name || '').toLowerCase().includes(q) || (r.email || '').toLowerCase().includes(q));
+    }, [rows, search, showRemoved]);
 
     async function load() {
         try {
             setBusy(true);
             const res = await authFetch('/api/roster');
             const data = await res.json();
-            if (Array.isArray(data)) setRows(data);
+            if (Array.isArray(data)) {
+                // Filter out Removed so they don't block re-adds
+                setRows(data);
+            }
+            // Also fetch latest invites for instructor/TA to mark expired
+            if (isInstructor || isTA) {
+                try {
+                    const ir = await authFetch('/api/invites');
+                    const invites = await ir.json();
+                    if (Array.isArray(invites)) {
+                        const map: Record<string, InviteResponse> = {};
+                        for (const inv of invites) {
+                            const existing = map[inv.rosterId];
+                            // Keep the most recent (assume array sorted newest first from API)
+                            if (!existing) map[inv.rosterId] = inv;
+                        }
+                        setInvitesByRoster(map);
+                    }
+                } catch (e: any) {
+                    // Non-fatal; just skip marking expiry
+                }
+            }
         } catch (e: any) { setErr(e.message || 'Failed to load'); } finally { setBusy(false); }
     }
     // Initial load
@@ -74,11 +100,13 @@ export default function ClassRoster() {
         if (!name.trim() || !email.trim()) { setErr('Name and email required'); return; }
         // Prevent adding duplicate emails (case-insensitive)
         const emailNorm = email.trim().toLowerCase();
-        const exists = rows.some(r => (r.email || '').toLowerCase() === emailNorm);
+        // Ignore Removed entries when checking duplicates; re-add will revive them
+        const exists = rows.some(r => r.status !== 'Removed' && (r.email || '').toLowerCase() === emailNorm);
         if (exists) { setErr('Email already exists'); return; }
         try {
             setBusy(true);
-            const res = await authFetch('/api/roster', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: name.trim(), email: email.trim(), status: 'Invited' }) });
+            // New manual additions start as Pending; they become Invited only after creating an invite
+            const res = await authFetch('/api/roster', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: name.trim(), email: email.trim(), status: 'Pending' }) });
             const data = await res.json();
             if (Array.isArray(data) && data.length) setRows((r) => [...data, ...r]); else if (data?.id) setRows((r) => [data, ...r]);
             setName(''); setEmail(''); setNote('Added');
@@ -108,7 +136,8 @@ export default function ClassRoster() {
                         .filter((r) => r.name && r.email);
                     if (!parsed.length) { setErr('No valid rows (need "name" and "email" columns)'); return; }
                     // Skip duplicates that already exist in roster (case-insensitive) and within the CSV itself
-                    const existing = new Set(rows.map(x => (x.email || '').toLowerCase()));
+                    // Exclude Removed entries from duplicate detection
+                    const existing = new Set(rows.filter(x => x.status !== 'Removed').map(x => (x.email || '').toLowerCase()));
                     const seen = new Set<string>();
                     const toImport: { name: string; email: string }[] = [];
                     let skipped = 0;
@@ -150,7 +179,15 @@ export default function ClassRoster() {
             const data = await res.json();
             if (!res.ok) throw new Error(data?.error || 'Failed to create invite');
             const link = data?.link as string;
-            await navigator.clipboard.writeText(link);
+            // Optimistically mark as Invited
+            setRows(r => r.map(x => x.id === row.id ? { ...x, status: 'Invited' } as RosterEntry : x));
+            // Try to copy to clipboard; provide a manual fallback
+            try {
+                await navigator.clipboard.writeText(link);
+            } catch {
+                // Fallback: show a prompt so user can copy manually
+                try { window.prompt('Copy invite link', link); } catch { /* ignore */ }
+            }
             if (data?.emailSent) {
                 setNote('Invite sent and link copied to clipboard');
             } else {
@@ -186,8 +223,16 @@ export default function ClassRoster() {
             if (!res.ok) throw new Error(data?.error || 'Failed to fetch invite');
             const invite = Array.isArray(data) ? data[0] : data;
             const link = invite?.link as string | undefined;
-            if (!link) throw new Error('Invite link unavailable');
-            await navigator.clipboard.writeText(link);
+            if (!link) {
+                // Attempt a refresh to pick up latest status and links
+                await load();
+                throw new Error('Invite link unavailable (roster refreshed).');
+            }
+            try {
+                await navigator.clipboard.writeText(link);
+            } catch {
+                try { window.prompt('Copy invite link', link); } catch { /* ignore */ }
+            }
             setNote('Invite link copied to clipboard');
         } catch (e: any) {
             setErr(e.message || 'Failed to copy link');
@@ -251,6 +296,12 @@ export default function ClassRoster() {
                         }}
                         sx={{ width: { xs: '100%', sm: 300 } }}
                     />
+                    {user?.role === 'instructor' && (
+                        <FormControlLabel
+                            control={<Switch size="small" checked={showRemoved} onChange={(_, checked) => setShowRemoved(checked)} />}
+                            label="Show removed"
+                        />
+                    )}
                 </Stack>
                 <Table size="small">
                     <TableHead>
@@ -272,31 +323,60 @@ export default function ClassRoster() {
                                 <TableCell>
                                     <Chip
                                         size="small"
-                                        label={r.status}
-                                        color={r.status === 'Active' ? 'success' : r.status === 'Invited' ? 'primary' : r.status === 'Pending' ? 'warning' : 'default'}
+                                        label={(() => {
+                                            if (r.status === 'Invited') {
+                                                const inv = invitesByRoster[r.id];
+                                                if (inv?.expiresAt && !inv.usedAt) {
+                                                    const exp = new Date(inv.expiresAt).getTime();
+                                                    if (Date.now() > exp) return 'Expired';
+                                                }
+                                            }
+                                            return r.status;
+                                        })()}
+                                        color={(() => {
+                                            const inv = invitesByRoster[r.id];
+                                            if (r.status === 'Invited' && inv?.expiresAt && !inv.usedAt) {
+                                                const exp = new Date(inv.expiresAt).getTime();
+                                                if (Date.now() > exp) return 'error';
+                                            }
+                                            return r.status === 'Active' ? 'success' : r.status === 'Invited' ? 'primary' : r.status === 'Pending' ? 'warning' : 'default';
+                                        })()}
                                         variant={r.status === 'Invited' || r.status === 'Pending' ? 'outlined' : 'filled'}
+                                        title={(() => {
+                                            const inv = invitesByRoster[r.id];
+                                            if (inv?.expiresAt) {
+                                                const expDate = new Date(inv.expiresAt);
+                                                const expired = Date.now() > expDate.getTime();
+                                                return expired ? `Invite expired ${expDate.toLocaleString()}` : `Invite expires ${expDate.toLocaleString()}`;
+                                            }
+                                            return undefined;
+                                        })()}
                                     />
                                 </TableCell>
                                 {user?.role === 'instructor' && <TableCell>
-                                    <Tooltip title="Teaching Assistant" arrow>
-                                        <FormControlLabel
-                                            control={<Switch size="small" checked={!!r.evaluator} onChange={async (_, checked) => {
-                                                try {
-                                                    setBusy(true);
-                                                    const res = await authFetch('/api/roster', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: r.id, evaluator: checked }) });
-                                                    const data = await res.json();
-                                                    if (!res.ok) throw new Error(data?.error || 'Failed to update');
-                                                    setRows(rows => rows.map(x => x.id === r.id ? { ...x, evaluator: data.evaluator } : x));
-                                                    setNote(checked ? 'Granted Teaching Assistant privilege' : 'Revoked Teaching Assistant privilege');
-                                                } catch (e: any) {
-                                                    setErr(e.message || 'Update failed');
-                                                } finally {
-                                                    setBusy(false);
-                                                }
-                                            }} />}
-                                            label="TA"
-                                        />
-                                    </Tooltip>
+                                    {r.status !== 'Removed' ? (
+                                        <Tooltip title="Teaching Assistant" arrow>
+                                            <FormControlLabel
+                                                control={<Switch size="small" checked={!!r.evaluator} onChange={async (_, checked) => {
+                                                    try {
+                                                        setBusy(true);
+                                                        const res = await authFetch('/api/roster', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: r.id, evaluator: checked }) });
+                                                        const data = await res.json();
+                                                        if (!res.ok) throw new Error(data?.error || 'Failed to update');
+                                                        setRows(rows => rows.map(x => x.id === r.id ? { ...x, evaluator: data.evaluator } : x));
+                                                        setNote(checked ? 'Granted Teaching Assistant privilege' : 'Revoked Teaching Assistant privilege');
+                                                    } catch (e: any) {
+                                                        setErr(e.message || 'Update failed');
+                                                    } finally {
+                                                        setBusy(false);
+                                                    }
+                                                }} />}
+                                                label="TA"
+                                            />
+                                        </Tooltip>
+                                    ) : (
+                                        <Typography variant="body2" color="text.secondary">—</Typography>
+                                    )}
                                 </TableCell>}
                                 <TableCell align="right">
                                     {(isInstructor || isTA) ? (
@@ -322,7 +402,7 @@ export default function ClassRoster() {
                                                     </span>
                                                 </Tooltip>
                                             )}
-                                            {isInstructor && (
+                                            {isInstructor && r.status !== 'Removed' && (
                                                 <IconButton size="small" color="error" onClick={() => remove(r.id)} disabled={busy}><DeleteIcon fontSize="small" /></IconButton>
                                             )}
                                         </>
