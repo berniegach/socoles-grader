@@ -152,7 +152,7 @@ void StudentQuery::result_analysis(const Admin &admin, const vector<vector<strin
         set_results_outcome(Grader::property_state::INCORRECT);
         add_feedback(" RESULTS: The output of the query is not correct. ");
     }
-    print_output();
+    // print_output();
 }
 
 void StudentQuery::syntax_analysis(const Admin &admin, vector<ModelQuery> &model_queries, vector<StudentQuery> &student_queries, Query_Engine &qe)

@@ -3,6 +3,8 @@
 #include <fstream>
 #include <sstream>
 #include <regex>
+#include "limits.h"
+#include "metrics.h"
 
 using namespace duckdb;
 
@@ -50,6 +52,14 @@ MyDuckDB::MyDuckDB(const std::string &filename)
 std::vector<std::vector<std::string>> MyDuckDB::execute_query_select(const std::string &query, std::string &error)
 {
     duckdb::Connection con(db);
+    // Apply memory limit if configured
+    auto &limits = get_limits();
+    if (limits.duckdb_memory_limit_mb > 0)
+    {
+        std::ostringstream q;
+        q << "PRAGMA memory_limit='" << limits.duckdb_memory_limit_mb << "MB';";
+        con.Query(q.str());
+    }
     std::vector<std::vector<std::string>> data;
     // we not want this query to persist in the database.
     bool transaction_started = false;
@@ -64,7 +74,9 @@ std::vector<std::vector<std::string>> MyDuckDB::execute_query_select(const std::
     {
         con.BeginTransaction();
         transaction_started = true;
-        auto result = con.Query(new_query);
+        // Maybe enforce LIMIT
+        std::string rewritten = maybe_inject_limit(new_query, get_limits());
+        auto result = con.Query(rewritten);
 
         if (result->HasError())
         {
@@ -80,6 +92,12 @@ std::vector<std::vector<std::string>> MyDuckDB::execute_query_select(const std::
             for (int col = 0; col < result->ColumnCount(); col++)
             {
                 row_result.push_back(result->GetValue(col, row).ToString());
+            }
+            if (limits.max_select_rows > 0 && data.size() >= limits.max_select_rows)
+            {
+                Metrics::increment_select_truncated();
+                data.push_back({"__TRUNCATED__", "row_limit_exceeded"});
+                break;
             }
             data.push_back(row_result);
         }
@@ -181,7 +199,7 @@ std::vector<std::vector<std::string>> MyDuckDB::execute_query_not_select(const s
         before_tables.push_back(before_tables_result->GetValue(0, row).ToString());
     }
 
-    // Capture full table data before
+    // Capture full table data before (bounded)
     std::map<std::string, std::vector<std::vector<std::string>>> before_state;
     for (auto &table : before_tables)
     {
@@ -198,6 +216,13 @@ std::vector<std::vector<std::string>> MyDuckDB::execute_query_not_select(const s
                     row_data.push_back(result->GetValue(c, r).ToString());
                 }
                 rows.push_back(row_data);
+                auto &limitsB = get_limits();
+                if (limitsB.max_snapshot_rows > 0 && rows.size() >= limitsB.max_snapshot_rows)
+                {
+                    Metrics::increment_snapshot_truncated();
+                    rows.push_back({"__SNAPSHOT_TRUNCATED__"});
+                    break;
+                }
             }
             before_state[table] = rows;
         }
@@ -295,7 +320,7 @@ std::vector<std::vector<std::string>> MyDuckDB::execute_query_not_select(const s
         after_tables.push_back(after_tables_result->GetValue(0, row).ToString());
     }
 
-    // 7) Capture full table data after
+    // 7) Capture full table data after (bounded)
     std::map<std::string, std::vector<std::vector<std::string>>> after_state;
     for (auto &table : after_tables)
     {
@@ -312,6 +337,13 @@ std::vector<std::vector<std::string>> MyDuckDB::execute_query_not_select(const s
                     row_data.push_back(result->GetValue(c, r).ToString());
                 }
                 rows.push_back(row_data);
+                auto &limitsA = get_limits();
+                if (limitsA.max_snapshot_rows > 0 && rows.size() >= limitsA.max_snapshot_rows)
+                {
+                    Metrics::increment_snapshot_truncated();
+                    rows.push_back({"__SNAPSHOT_TRUNCATED__"});
+                    break;
+                }
             }
             after_state[table] = rows;
         }

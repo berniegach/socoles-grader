@@ -26,17 +26,7 @@ RUN git clone --depth 1 --branch v1.0+5 https://github.com/CrowCpp/Crow.git /tmp
     && make -j"$(nproc)" install \
     && rm -rf /tmp/Crow
 
-# Build & install DuckDB so we get libduckdb.so in /usr/local/lib
-RUN git clone --depth 1 https://github.com/duckdb/duckdb.git /tmp/duckdb \
-    && mkdir /tmp/duckdb/build \
-    && cd /tmp/duckdb/build \
-    && cmake \
-    -DCMAKE_BUILD_TYPE=Release \
-    -DCMAKE_INSTALL_PREFIX=/usr/local \
-    .. \
-    # to avoid memory issues, limit parallel jobs to 2
-    && make -j2 install \
-    && rm -rf /tmp/duckdb                            
+## Note: We rely on the vendored DuckDB library and headers in the repository to avoid header/ABI mismatches.
 
 
 
@@ -62,8 +52,8 @@ RUN apt-get update && apt-get install -y \
 # copy the compiled server
 COPY --from=builder /app/build/socoles_server /usr/local/bin/socoles_server
 
-# copy DuckDB’s shared libs from builder to ensure they load at runtime
-COPY --from=builder /usr/local/lib/libduckdb.so* /usr/local/lib/
+# copy DuckDB’s shared lib from the build context (vendored)
+COPY --from=builder /app/duckdb/libduckdb.so* /usr/local/lib/
 # copy required shared libs from builder to avoid version-locked runtime packages
 COPY --from=builder /usr/lib/x86_64-linux-gnu/libpg_query.so* /usr/local/lib/
 COPY --from=builder /usr/lib/x86_64-linux-gnu/libpqxx.so* /usr/local/lib/

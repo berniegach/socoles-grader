@@ -12,6 +12,7 @@
 #include "student_query.h"
 #include "process_queries.h"
 #include "admin.h"
+#include "metrics.h"
 
 Grader::grading_options set_grading_options(int syntax, int semantics, int results, int order_of_importance);
 int main()
@@ -169,8 +170,23 @@ int main()
                                                                                                          return res;
                                                                                                      }
 
-                                                                                                     try
+                                                                                                    try
                                                                                                      {
+                                                                                                         // Admission control
+                                                                                                         if (!Metrics::try_acquire_slot())
+                                                                                                         {
+                                                                                                             Metrics::increment_capacity_reject();
+                                                                                                             res.code = 429; // Too Many Requests
+                                                                                                             res.set_header("Content-Type", "application/json");
+                                                                                                             crow::json::wvalue o;
+                                                                                                             o["error"] = "capacity_exceeded";
+                                                                                                             o["active"] = Metrics::active();
+                                                                                                             o["capacity"] = Metrics::capacity();
+                                                                                                             res.write(o.dump());
+                                                                                                             return res;
+                                                                                                         }
+                                                                                                         // RAII release
+                                                                                                         struct SlotRelease { ~SlotRelease(){ Metrics::release_slot(); } }; SlotRelease _slot_guard;
                                                                                                          // Handle POST request
                                                                                                          auto body = crow::json::load(req.body);
                                                                                                          if (!body)
@@ -316,6 +332,7 @@ int main()
                                                                                                             index++;
                                                                                                         }
 
+                                                                                                         Metrics::increment_total_graded();
                                                                                                          res.code = 200; // OK
                                                                                                          res.set_header("Content-Type", "application/json");
                                                                                                          res.write(jsonResults.dump());
@@ -332,7 +349,16 @@ int main()
 
     // Lightweight health endpoint for orchestration
     CROW_ROUTE(app, "/health").methods(crow::HTTPMethod::GET)([]()
-                                                              { return crow::response(200, "ok"); });
+                                                              {
+                                                                  crow::json::wvalue status;
+                                                                  status["status"] = "ok";
+                                                                  status["active_grading"] = Metrics::active();
+                                                                  status["capacity"] = Metrics::capacity();
+                                                                  status["total_graded"] = Metrics::total_graded();
+                                                                  status["capacity_rejected"] = Metrics::capacity_rejected();
+                                                                  status["select_truncated"] = Metrics::select_truncated();
+                                                                  status["snapshot_truncated"] = Metrics::snapshot_truncated();
+                                                                  return crow::response(200, status.dump()); });
 
     app.port(port).multithreaded().run();
 }

@@ -4,6 +4,8 @@
 #include <algorithm>
 #include <sstream>
 #include "clauses/common.h"
+#include "limits.h"
+#include "metrics.h"
 
 using namespace pqxx;
 
@@ -31,7 +33,16 @@ MyPostgres::execute_query_select(const std::string &query, std::string &error)
     try
     {
         work tx{conn};
-        auto res = tx.exec(query);
+        // Apply statement timeout if configured
+        auto &limits = get_limits();
+        if (limits.statement_timeout_ms > 0)
+        {
+            std::ostringstream st;
+            st << "SET LOCAL statement_timeout = " << limits.statement_timeout_ms << ";";
+            tx.exec(st.str());
+        }
+        std::string rewritten = maybe_inject_limit(query, get_limits());
+        auto res = tx.exec(rewritten);
         for (auto const &row : res)
         {
             std::vector<std::string> rec;
@@ -39,6 +50,13 @@ MyPostgres::execute_query_select(const std::string &query, std::string &error)
             for (auto const &field : row)
             {
                 rec.push_back(field.c_str());
+            }
+            auto &limits2 = get_limits();
+            if (limits2.max_select_rows > 0 && data.size() >= limits2.max_select_rows)
+            {
+                Metrics::increment_select_truncated();
+                data.push_back({"__TRUNCATED__", "row_limit_exceeded"});
+                break;
             }
             data.push_back(std::move(rec));
         }
@@ -76,7 +94,7 @@ MyPostgres::execute_query_not_select(const std::string &query, std::string &erro
             }
         }
 
-        // 2) Snapshot full data before
+        // 2) Snapshot full data before (bounded)
         std::map<std::string, std::vector<std::vector<std::string>>> before_state;
         for (auto const &tbl : before_tables)
         {
@@ -94,6 +112,13 @@ MyPostgres::execute_query_not_select(const std::string &query, std::string &erro
                     rec.push_back(f.c_str());
                 }
                 rows.push_back(std::move(rec));
+                auto &limits = get_limits();
+                if (limits.max_snapshot_rows > 0 && rows.size() >= limits.max_snapshot_rows)
+                {
+                    Metrics::increment_snapshot_truncated();
+                    rows.push_back({"__SNAPSHOT_TRUNCATED__"});
+                    break;
+                }
             }
             before_state[tbl] = std::move(rows);
         }
@@ -192,7 +217,7 @@ MyPostgres::execute_query_not_select(const std::string &query, std::string &erro
             }
         }
 
-        // 6) Snapshot full data after
+        // 6) Snapshot full data after (bounded)
         std::map<std::string, std::vector<std::vector<std::string>>> after_state;
         for (auto const &tbl : after_tables)
         {
@@ -210,6 +235,13 @@ MyPostgres::execute_query_not_select(const std::string &query, std::string &erro
                     rec.push_back(f.c_str());
                 }
                 rows.push_back(std::move(rec));
+                auto &limits = get_limits();
+                if (limits.max_snapshot_rows > 0 && rows.size() >= limits.max_snapshot_rows)
+                {
+                    Metrics::increment_snapshot_truncated();
+                    rows.push_back({"__SNAPSHOT_TRUNCATED__"});
+                    break;
+                }
             }
             after_state[tbl] = std::move(rows);
         }
