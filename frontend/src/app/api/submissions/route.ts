@@ -39,7 +39,7 @@ export async function GET(req: NextRequest) {
                             ${filterClause}
                         ORDER BY created_at DESC
                         LIMIT 1000`, studentParams as any[] | undefined));
-        console.log("Returned rows:", rows);
+        //console.log("Returned rows:", rows);
         return NextResponse.json(rows);
     } catch (e) {
         return NextResponse.json({ error: (e as Error).message || 'failed' }, { status: 500 });

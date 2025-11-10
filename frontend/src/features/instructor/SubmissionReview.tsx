@@ -255,8 +255,8 @@ export default function SubmissionReview() {
                             <Box sx={{ mb: 2 }}>
                                 <Typography variant='subtitle1' sx={{ mb: 1 }}>Assignment Overview</Typography>
                                 <ResultsCharts
-                                    results={rows.map(r => ({ Grade: (r as any).grade ?? 0 }))}
-                                    loadAttemptsFor={selectedAssignment ? { assignmentId: selectedAssignment.id, student: (rows[0]?.student || ''), token: user?.token } : undefined}
+                                    results={rows.map(r => ({ Grade: (r as any).grade ?? 0, Status: (r as any).status }))}
+                                    loadAttemptsForCohort={selectedAssignment ? { assignmentId: selectedAssignment.id, token: user?.token } : undefined}
                                     onAdvancedChange={(o) => setChartsAdvancedOpen(o)}
                                 />
                             </Box>

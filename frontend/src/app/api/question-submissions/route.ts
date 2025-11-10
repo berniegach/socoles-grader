@@ -17,6 +17,7 @@ export async function GET(req: NextRequest) {
         const assignmentId = searchParams.get('assignmentId');
         const student = searchParams.get('student');
         const historyOf = searchParams.get('historyOf');
+        const allStudents = searchParams.get('allStudents');
         const instructorId = payload.role === 'student' ? (payload.instructorId as string) : payload.sub;
         return await withInstructorContext(instructorId, async () => {
             if (historyOf) {
@@ -49,6 +50,13 @@ export async function GET(req: NextRequest) {
                 const { rows } = await query(`SELECT qs.id, qs.submission_id as "submissionId", qs.assignment_id as "assignmentId", qs.question_id as "questionId", qs.student, qs.sql, qs.grade::float8 as grade, qs.status, qs.rubric, qs.feedback, qs.attempt, q.title
                     FROM question_submissions qs JOIN questions q ON q.id = qs.question_id
                     WHERE qs.assignment_id=$1 AND qs.student=$2 AND qs.owner_id = current_setting('app.current_instructor')::uuid ORDER BY q.title`, [assignmentId, student]);
+                return NextResponse.json(rows);
+            }
+            if (assignmentId && allStudents === '1') {
+                const { rows } = await query(`SELECT qs.id, qs.submission_id as "submissionId", qs.assignment_id as "assignmentId", qs.question_id as "questionId", qs.student, qs.sql, qs.grade::float8 as grade, qs.status, qs.rubric, qs.feedback, qs.attempt, q.title
+                    FROM question_submissions qs JOIN questions q ON q.id = qs.question_id
+                    WHERE qs.assignment_id=$1 AND qs.owner_id = current_setting('app.current_instructor')::uuid
+                    ORDER BY q.title, qs.student, qs.created_at ASC`, [assignmentId]);
                 return NextResponse.json(rows);
             }
             return NextResponse.json({ error: 'submissionId or (assignmentId & student) required' }, { status: 400 });

@@ -39,6 +39,12 @@ export async function GET(req: Request) {
                 `SELECT improved_understanding, count(*)::int AS n FROM assignment_feedback_survey WHERE ${where} GROUP BY improved_understanding ORDER BY improved_understanding`, params));
             const { rows: improvements } = await withInstructorContext(instructorId, () => query<any>(
                 `SELECT improvement, helped_fix, improved_understanding FROM assignment_feedback_survey WHERE ${where} AND improvement IS NOT NULL`, params));
+            const { rows: responses } = await withInstructorContext(instructorId, () => query<any>(
+                `SELECT student, helped_fix, improved_understanding, improvement, comment, created_at
+                 FROM assignment_feedback_survey
+                 WHERE ${where}
+                 ORDER BY created_at DESC
+                 LIMIT 1000`, params));
             // Correlation (Pearson) computed in JS for simplicity
             function pearson(a: number[], b: number[]): number | null {
                 if (a.length !== b.length || a.length < 2) return null;
@@ -68,7 +74,8 @@ export async function GET(req: Request) {
                 improved_understanding_distribution: dist2,
                 correlation: { improvement_helped_fix: corrHelped, improvement_understanding: corrUnderstanding },
                 percent_improved: basic[0]?.total_responses ? +(improvedCount / basic[0].total_responses * 100).toFixed(1) : null,
-                median_improvement: medianImprovement
+                median_improvement: medianImprovement,
+                responses
             });
         }
         if (assignmentId) {
