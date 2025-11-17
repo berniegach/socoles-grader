@@ -57,9 +57,9 @@ services:
   backend:
     image: ${BACKEND_IMAGE:-ghcr.io/berniegach/socoles-backend:1.0.2}
     # Uncomment to build locally instead of pulling
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
+    # build:
+    #  context: ./backend
+    #  dockerfile: Dockerfile
     depends_on:
       db:
         condition: service_healthy
@@ -85,7 +85,7 @@ services:
       retries: 5
 
   frontend:
-    image: ${FRONTEND_IMAGE:-ghcr.io/berniegach/socoles-frontend:1.1.1}
+    image: ${FRONTEND_IMAGE:-ghcr.io/berniegach/socoles-frontend:1.1.2}
     # Uncomment to build locally instead of pulling
     # build:
     #  context: ./frontend
