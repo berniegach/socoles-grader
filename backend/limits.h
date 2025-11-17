@@ -29,5 +29,6 @@ const SocolesLimits &get_limits();
 
 // Utility helpers
 std::string maybe_inject_limit(const std::string &sql, const SocolesLimits &limits);
+bool contains_limit(const std::string &sql);
 
 #endif // SOCOLES_LIMITS_H

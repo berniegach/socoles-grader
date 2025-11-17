@@ -2,6 +2,8 @@
 #include <cstdlib>
 #include <algorithm>
 #include <cctype>
+#include <iostream>
+#include <regex>
 
 static size_t parse_size_t_env(const char *name, size_t def)
 {
@@ -88,10 +90,7 @@ std::string maybe_inject_limit(const std::string &sql, const SocolesLimits &limi
         return sql;
 
     // If already contains LIMIT (case-insensitive), do nothing
-    std::string sql_lower(sql);
-    std::transform(sql_lower.begin(), sql_lower.end(), sql_lower.begin(), [](unsigned char c)
-                   { return std::tolower(c); });
-    if (sql_lower.find(" limit ") != std::string::npos || sql_lower.rfind(" limit", sql_lower.size() - 6) != std::string::npos)
+    if (contains_limit(sql))
     {
         return sql;
     }
@@ -106,4 +105,17 @@ std::string maybe_inject_limit(const std::string &sql, const SocolesLimits &limi
     out += " LIMIT ";
     out += std::to_string(limits.enforced_limit_value);
     return out;
+}
+bool contains_limit(const std::string &sql)
+{
+    // Lower-case copy
+    std::string sql_lower(sql);
+    std::transform(sql_lower.begin(), sql_lower.end(), sql_lower.begin(), [](unsigned char c)
+                   { return std::tolower(c); });
+
+    // Regex: word boundary -> "limit" -> word boundary
+    // Works across newlines, tabs, spaces
+    std::regex limit_regex(R"(\blimit\b)", std::regex::icase);
+
+    return std::regex_search(sql_lower, limit_regex);
 }

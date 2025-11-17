@@ -13,6 +13,7 @@
 #include "clauses/select/group_by_clause.h"
 #include "clauses/select/having_clause.h"
 #include "clauses/select/order_by_clause.h"
+#include "clauses/select/limit_clause.h"
 #include "clauses/assertion_clause.h"
 #include "clauses/create_clause.h"
 #include "clauses/update_clause.h"
@@ -101,6 +102,16 @@ std::vector<Goals::Goal> Goals::process_query(const std::shared_ptr<AbstractSynt
             Goal goal;
             goal.type = "Order_by";
             goal.content = order_by_result.first;
+            goals.push_back(goal);
+        }
+
+        // Step 7: Process LIMIT/OFFSET clause
+        auto limit_result = Limit_clause::process(root_node);
+        if (!limit_result.first.empty() && limit_result.first != "No LIMIT/OFFSET clause present")
+        {
+            Goal goal;
+            goal.type = "Limit";
+            goal.content = limit_result.first;
             goals.push_back(goal);
         }
     }
@@ -224,7 +235,8 @@ Common::comparision_result Goals::compare_single_statement(const std::shared_ptr
         Where_clause::where_clause_info ref_where_info, stu_where_info;
         Group_by_clause::group_by_clause_info ref_group_by_info, stu_group_by_info;
         Where_clause::where_clause_info ref_having_info, stu_having_info;
-        Order_by_clause::order_by_clause_info ref_order_by_info, stu_order_by_info;
+    Order_by_clause::order_by_clause_info ref_order_by_info, stu_order_by_info;
+    Limit_clause::limit_clause_info ref_limit_info, stu_limit_info;
 
         // Process the clauses and collect info
         // Reference Query
@@ -243,8 +255,11 @@ Common::comparision_result Goals::compare_single_statement(const std::shared_ptr
         auto ref_having_result = Having_clause::process(reference_root, ref_from_info, ref_select_info);
         ref_having_info = ref_having_result.second;
 
-        auto ref_order_by_result = Order_by_clause::process(reference_root, ref_from_info, ref_select_info);
+    auto ref_order_by_result = Order_by_clause::process(reference_root, ref_from_info, ref_select_info);
         ref_order_by_info = ref_order_by_result.second;
+
+    auto ref_limit_result = Limit_clause::process(reference_root);
+    ref_limit_info = ref_limit_result.second;
 
         // Student Query
         auto stu_from_result = From_clause::process(student_root);
@@ -262,8 +277,11 @@ Common::comparision_result Goals::compare_single_statement(const std::shared_ptr
         auto stu_having_result = Having_clause::process(student_root, stu_from_info, stu_select_info);
         stu_having_info = stu_having_result.second;
 
-        auto stu_order_by_result = Order_by_clause::process(student_root, stu_from_info, stu_select_info);
+    auto stu_order_by_result = Order_by_clause::process(student_root, stu_from_info, stu_select_info);
         stu_order_by_info = stu_order_by_result.second;
+
+    auto stu_limit_result = Limit_clause::process(student_root);
+    stu_limit_info = stu_limit_result.second;
 
         // Keep track of correctly matched clauses
         std::vector<std::string> correct_clauses;
@@ -366,6 +384,46 @@ Common::comparision_result Goals::compare_single_statement(const std::shared_ptr
             next_steps.push_back("Adjust the ORDER BY clause to sort the results as specified.");
         }
 
+        // Compare LIMIT/OFFSET clauses
+        auto limit_comparison = Limit_clause::compare(ref_limit_info, stu_limit_info);
+        if (limit_comparison.first == 1)
+        {
+            correct_clauses.push_back("LIMIT/OFFSET clause");
+        }
+        else if (limit_comparison.first == -1)
+        {
+            // Both queries have no LIMIT/OFFSET clause
+        }
+        else
+        {
+            problem_clauses.push_back("LIMIT/OFFSET clause");
+            // Suggestions
+            if (ref_limit_info.has_limit && !stu_limit_info.has_limit)
+            {
+                next_steps.push_back("💡 Add a LIMIT clause to restrict the number of returned rows as specified.");
+            }
+            else if (!ref_limit_info.has_limit && stu_limit_info.has_limit)
+            {
+                next_steps.push_back("💡 Remove the LIMIT clause unless explicitly required by the goal.");
+            }
+            else if (ref_limit_info.has_limit && stu_limit_info.has_limit && ref_limit_info.limit_count != stu_limit_info.limit_count)
+            {
+                next_steps.push_back("💡 Adjust the LIMIT value to match the expected number of rows (" + ref_limit_info.limit_count + ").");
+            }
+            if (ref_limit_info.has_offset && !stu_limit_info.has_offset)
+            {
+                next_steps.push_back("💡 Add the required OFFSET to skip the initial rows as specified.");
+            }
+            else if (!ref_limit_info.has_offset && stu_limit_info.has_offset)
+            {
+                next_steps.push_back("💡 Remove the OFFSET clause unless the task requires it.");
+            }
+            else if (ref_limit_info.has_offset && stu_limit_info.has_offset && ref_limit_info.limit_offset != stu_limit_info.limit_offset)
+            {
+                next_steps.push_back("💡 Adjust the OFFSET value to match the expected starting position (" + ref_limit_info.limit_offset + ").");
+            }
+        }
+
         // Build the output string
 
         // 1. What the student query managed
@@ -420,6 +478,10 @@ Common::comparision_result Goals::compare_single_statement(const std::shared_ptr
             if (std::find(problem_clauses.begin(), problem_clauses.end(), "ORDER BY clause") != problem_clauses.end())
             {
                 oss << std::to_string(count++) << ". ORDER BY clause: " << order_by_comparison.second << "\n";
+            }
+            if (std::find(problem_clauses.begin(), problem_clauses.end(), "LIMIT/OFFSET clause") != problem_clauses.end())
+            {
+                oss << std::to_string(count++) << ". LIMIT/OFFSET clause: " << limit_comparison.second << "\n";
             }
             oss << "\n";
         }
@@ -702,13 +764,14 @@ std::string Goals::generate_goal_for_stmt_general(const std::shared_ptr<Abstract
 
     if (stmt_type == "SelectStmt")
     {
-        // Process each clause of the query to extract information
+    // Process each clause of the query to extract information
         auto from_result = From_clause::process(root_node);
         auto select_result = Select_clause::process(root_node, from_result.second);
         auto where_result = Where_clause::process(root_node, from_result.second, select_result.second);
         auto group_by_result = Group_by_clause::process(root_node, from_result.second);
         auto having_result = Having_clause::process(root_node, from_result.second, select_result.second);
         auto order_by_result = Order_by_clause::process(root_node, from_result.second, select_result.second);
+    auto limit_result = Limit_clause::process(root_node);
 
         // FROM clause: Identify data sources
         size_t table_count = from_result.second.tables.size();
@@ -752,6 +815,25 @@ std::string Goals::generate_goal_for_stmt_general(const std::shared_ptr<Abstract
         if (order_by_item_count > 0)
         {
             oss << "\n ● Sort the output data by " << order_by_item_count << " column" << (order_by_item_count > 1 ? "s" : "") << "; ";
+        }
+
+        // LIMIT/OFFSET clause
+        if (limit_result.second.has_limit || limit_result.second.has_offset)
+        {
+            oss << "\n ● ";
+            if (limit_result.second.has_limit)
+            {
+                oss << "Limit results to " << limit_result.second.limit_count << " row";
+                if (limit_result.second.limit_count != "1")
+                    oss << "s";
+            }
+            if (limit_result.second.has_offset)
+            {
+                if (limit_result.second.has_limit)
+                    oss << ", ";
+                oss << "starting at offset " << limit_result.second.limit_offset;
+            }
+            oss << "; ";
         }
     }
     else if (stmt_type == "CreateStmt")
@@ -869,7 +951,8 @@ std::string Goals::generate_goal_for_stmt_specific(const std::shared_ptr<Abstrac
         auto where_result = Where_clause::process(root_node, from_result.second, select_result.second);
         auto group_by_result = Group_by_clause::process(root_node, from_result.second);
         auto having_result = Having_clause::process(root_node, from_result.second, select_result.second);
-        auto order_by_result = Order_by_clause::process(root_node, from_result.second, select_result.second);
+    auto order_by_result = Order_by_clause::process(root_node, from_result.second, select_result.second);
+    auto limit_result = Limit_clause::process(root_node);
 
         // FROM clause: Identify data sources
         if (!from_result.second.tables.empty())
@@ -957,6 +1040,21 @@ std::string Goals::generate_goal_for_stmt_specific(const std::shared_ptr<Abstrac
                     oss << ", ";
                 else if (i == order_by_result.second.order_items.size() - 2)
                     oss << " and ";
+            }
+        }
+
+        // LIMIT/OFFSET clause: Restrict rows and/or shift start
+        if (limit_result.second.has_limit || limit_result.second.has_offset)
+        {
+            if (limit_result.second.has_limit)
+            {
+                oss << "\n ● Limit results to '" << limit_result.second.limit_count << "' row";
+                if (limit_result.second.limit_count != "1")
+                    oss << "s";
+            }
+            if (limit_result.second.has_offset)
+            {
+                oss << "\n ● Start at offset '" << limit_result.second.limit_offset << "'";
             }
         }
     }
