@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import {
     Box,
     Typography,
@@ -90,7 +90,7 @@ export default function AssignmentQuestionManager() {
 
     const selected = useMemo<Assignment | AssignmentWithQuestions | null>(() => assignments.find(a => a.id === selectedId) || null, [assignments, selectedId]);
     const [pickerMode, setPickerMode] = useState(false);
-    const pickerRef = useState<AssignmentQuestionPickerHandle | null>(null)[0] as any;
+    const pickerRef = useRef<AssignmentQuestionPickerHandle | null>(null);
 
     async function loadAssignments(includeQuestions = false) {
         if (!user?.token) return; // wait for auth
@@ -292,7 +292,7 @@ export default function AssignmentQuestionManager() {
                 <HeaderActions
                     actions={[
                         { key: 'back', ariaLabel: 'Back to assignments', title: 'Back to assignments', icon: <ArrowBackIcon fontSize='small' />, onClick: () => setPickerMode(false) },
-                        { key: 'save', ariaLabel: 'Save changes', title: 'Save changes', icon: <SaveIcon fontSize='small' />, onClick: () => pickerRef?.save?.() }
+                        { key: 'save', ariaLabel: 'Save changes', title: 'Save changes', icon: <SaveIcon fontSize='small' />, onClick: () => pickerRef.current?.save?.() }
                     ]}
                 />
             )}
