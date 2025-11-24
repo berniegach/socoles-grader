@@ -154,7 +154,22 @@ const AssignmentQuestionPicker = forwardRef<AssignmentQuestionPickerHandle, Pick
                     <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', mb: 1 }}>
                         <TextField size="small" variant="outlined" placeholder="Filter…" value={filter} onChange={e => setFilter(e.target.value)} fullWidth />
                     </Box>
-                    <Box sx={{ flex: 1, minHeight: 0, overflow: 'auto', border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1, display: 'flex', flexDirection: 'column', gap: 1 }}>
+                    <Box
+                        sx={{
+                            flex: 1,
+                            minHeight: 0,
+                            overflowY: 'auto',
+                            overflowX: 'hidden',
+                            border: '1px solid',
+                            borderColor: 'divider',
+                            borderRadius: 1,
+                            p: 1,
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: 1,
+                            '& > *': { flexShrink: 0 }
+                        }}
+                    >
                         {loadingBank && (
                             <Box sx={{ py: 2, display: 'flex', justifyContent: 'center' }}>
                                 <CircularProgress size={20} />
@@ -204,7 +219,23 @@ const AssignmentQuestionPicker = forwardRef<AssignmentQuestionPickerHandle, Pick
                             <Chip size='small' color='primary' variant='outlined' label={`Total: ${totalLinkedPoints} pts`} />
                         </Box>
                     </Box>
-                    <Box sx={{ flex: 1, minHeight: 0, overflow: 'auto', border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1, display: 'flex', flexDirection: 'column', gap: 1, position: 'relative' }}>
+                    <Box
+                        sx={{
+                            flex: 1,
+                            minHeight: 0,
+                            overflowY: 'auto',
+                            overflowX: 'hidden',
+                            border: '1px solid',
+                            borderColor: 'divider',
+                            borderRadius: 1,
+                            p: 1,
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: 1,
+                            position: 'relative',
+                            '& > *': { flexShrink: 0 }
+                        }}
+                    >
                         {loadingLinks && (
                             <Box sx={{ py: 2, display: 'flex', justifyContent: 'center' }}>
                                 <CircularProgress size={20} />
