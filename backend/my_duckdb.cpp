@@ -3,6 +3,7 @@
 #include <fstream>
 #include <sstream>
 #include <regex>
+#include <set>
 #include "limits.h"
 #include "metrics.h"
 
@@ -258,6 +259,33 @@ std::vector<std::vector<std::string>> MyDuckDB::execute_query_not_select(const s
         }
     }
 
+    // capture check constraints before
+    std::map<std::string, std::vector<std::string>> before_checks;
+    for (auto &tbl : before_tables)
+    {
+        std::string sql =
+            "SELECT tc.constraint_name, cc.check_clause "
+            "FROM information_schema.table_constraints tc "
+            "JOIN information_schema.check_constraints cc "
+            "ON tc.constraint_catalog = cc.constraint_catalog "
+            "AND tc.constraint_schema = cc.constraint_schema "
+            "AND tc.constraint_name = cc.constraint_name "
+            "WHERE tc.table_name='" +
+            tbl + "' AND tc.constraint_type='CHECK';";
+        auto res = con.Query(sql);
+        if (!res->HasError())
+        {
+            std::vector<std::string> defs;
+            for (int r = 0; r < res->RowCount(); r++)
+            {
+                std::string def = res->GetValue(0, r).ToString() + ": " + res->GetValue(1, r).ToString();
+                defs.push_back(def);
+            }
+            std::sort(defs.begin(), defs.end());
+            before_checks[tbl] = std::move(defs);
+        }
+    }
+
     // 5) Execute the user query
     auto exec_result = con.Query(new_query);
     if (exec_result->HasError())
@@ -376,6 +404,33 @@ std::vector<std::vector<std::string>> MyDuckDB::execute_query_not_select(const s
             for (int r = 0; r < type_res->RowCount(); r++)
                 types.push_back(type_res->GetValue(2, r).ToString());
             after_types[tbl] = std::move(types);
+        }
+    }
+
+    // capture check constraints after
+    std::map<std::string, std::vector<std::string>> after_checks;
+    for (auto &tbl : after_tables)
+    {
+        std::string sql =
+            "SELECT tc.constraint_name, cc.check_clause "
+            "FROM information_schema.table_constraints tc "
+            "JOIN information_schema.check_constraints cc "
+            "ON tc.constraint_catalog = cc.constraint_catalog "
+            "AND tc.constraint_schema = cc.constraint_schema "
+            "AND tc.constraint_name = cc.constraint_name "
+            "WHERE tc.table_name='" +
+            tbl + "' AND tc.constraint_type='CHECK';";
+        auto res = con.Query(sql);
+        if (!res->HasError())
+        {
+            std::vector<std::string> defs;
+            for (int r = 0; r < res->RowCount(); r++)
+            {
+                std::string def = res->GetValue(0, r).ToString() + ": " + res->GetValue(1, r).ToString();
+                defs.push_back(def);
+            }
+            std::sort(defs.begin(), defs.end());
+            after_checks[tbl] = std::move(defs);
         }
     }
 
@@ -509,6 +564,37 @@ std::vector<std::vector<std::string>> MyDuckDB::execute_query_not_select(const s
         }
     }
 
+    // 12) Detect check constraint changes
+    std::set<std::string> constraint_tables;
+    for (auto &entry : before_checks)
+        constraint_tables.insert(entry.first);
+    for (auto &entry : after_checks)
+        constraint_tables.insert(entry.first);
+
+    for (auto &tbl : constraint_tables)
+    {
+        static const std::vector<std::string> empty_vec;
+        auto bit = before_checks.find(tbl);
+        auto ait = after_checks.find(tbl);
+        auto const &bcons = (bit != before_checks.end()) ? bit->second : empty_vec;
+        auto const &acons = (ait != after_checks.end()) ? ait->second : empty_vec;
+
+        for (auto const &def : acons)
+        {
+            if (std::find(bcons.begin(), bcons.end(), def) == bcons.end())
+            {
+                data.push_back({tbl, "constraint_added", def});
+            }
+        }
+        for (auto const &def : bcons)
+        {
+            if (std::find(acons.begin(), acons.end(), def) == acons.end())
+            {
+                data.push_back({tbl, "constraint_removed", def});
+            }
+        }
+    }
+
     if (transaction_started)
     {
         con.Rollback();
@@ -581,6 +667,18 @@ Common::comparision_result MyDuckDB::compare(const results_info &ref, const resu
                     << "': " << r.info << ".\n";
                 comp.next_steps.push_back("DELETE FROM " + r.table + " WHERE ...;");
             }
+            else if (r.op == "constraint_added")
+            {
+                msg << "❌ You did not add the required constraint on '" << r.table
+                    << "': " << r.info << ".\n";
+                comp.next_steps.push_back("ALTER TABLE " + r.table + " ADD CONSTRAINT ...");
+            }
+            else if (r.op == "constraint_removed")
+            {
+                msg << "❌ You did not drop the constraint on '" << r.table
+                    << "': " << r.info << ".\n";
+                comp.next_steps.push_back("ALTER TABLE " + r.table + " DROP CONSTRAINT ...");
+            }
             if (r.table == "constraint error")
             {
                 msg << "❌ Your query should have violated a " << r.op
@@ -640,6 +738,18 @@ Common::comparision_result MyDuckDB::compare(const results_info &ref, const resu
                 msg << "⚠️ You inserted an extra row into '" << s.table
                     << "': " << s.info << ".\n";
                 comp.next_steps.push_back("Remove that INSERT from your query.");
+            }
+            else if (s.op == "constraint_added")
+            {
+                msg << "⚠️ You added an unnecessary constraint on '" << s.table
+                    << "': " << s.info << ".\n";
+                comp.next_steps.push_back("Drop the extra constraint on " + s.table + ".");
+            }
+            else if (s.op == "constraint_removed")
+            {
+                msg << "⚠️ You removed a constraint from '" << s.table
+                    << "' that should stay: " << s.info << ".\n";
+                comp.next_steps.push_back("Recreate the constraint on " + s.table + ".");
             }
             else if (s.op == "removed")
             {

@@ -3,6 +3,7 @@
 #include <regex>
 #include <algorithm>
 #include <sstream>
+#include <set>
 #include "clauses/common.h"
 #include "limits.h"
 #include "metrics.h"
@@ -159,6 +160,30 @@ MyPostgres::execute_query_not_select(const std::string &query, std::string &erro
             before_types[tbl] = std::move(types);
         }
 
+        // capture check constraints before
+        std::map<std::string, std::vector<std::string>> before_checks;
+        for (auto const &tbl : before_tables)
+        {
+            std::ostringstream q;
+            q << "SELECT c.conname, pg_get_constraintdef(c.oid) "
+                 "FROM pg_constraint c "
+                 "JOIN pg_class t ON c.conrelid = t.oid "
+                 "JOIN pg_namespace n ON t.relnamespace = n.oid "
+                 "WHERE n.nspname='public' AND t.relname='"
+              << tbl << "' AND c.contype='c';";
+            auto res = tx.exec(q.str());
+            std::vector<std::string> defs;
+            defs.reserve(res.size());
+            for (auto const &r : res)
+            {
+                std::ostringstream def;
+                def << r[0].c_str() << ": " << r[1].c_str();
+                defs.push_back(def.str());
+            }
+            std::sort(defs.begin(), defs.end());
+            before_checks[tbl] = std::move(defs);
+        }
+
         // 4) Execute user DDL/DML
         try
         {
@@ -280,6 +305,30 @@ MyPostgres::execute_query_not_select(const std::string &query, std::string &erro
                 types.push_back(r[0].c_str());
             }
             after_types[tbl] = std::move(types);
+        }
+
+        // capture check constraints after
+        std::map<std::string, std::vector<std::string>> after_checks;
+        for (auto const &tbl : after_tables)
+        {
+            std::ostringstream q;
+            q << "SELECT c.conname, pg_get_constraintdef(c.oid) "
+                 "FROM pg_constraint c "
+                 "JOIN pg_class t ON c.conrelid = t.oid "
+                 "JOIN pg_namespace n ON t.relnamespace = n.oid "
+                 "WHERE n.nspname='public' AND t.relname='"
+              << tbl << "' AND c.contype='c';";
+            auto res = tx.exec(q.str());
+            std::vector<std::string> defs;
+            defs.reserve(res.size());
+            for (auto const &r : res)
+            {
+                std::ostringstream def;
+                def << r[0].c_str() << ": " << r[1].c_str();
+                defs.push_back(def.str());
+            }
+            std::sort(defs.begin(), defs.end());
+            after_checks[tbl] = std::move(defs);
         }
 
         tx.abort(); // rollback everything
@@ -412,6 +461,37 @@ MyPostgres::execute_query_not_select(const std::string &query, std::string &erro
                             str += f + " ";
                         data.push_back({tbl, "added", str});
                     }
+                }
+            }
+        }
+
+        // 8d) Check constraint changes
+        std::set<std::string> constraint_tables;
+        for (auto const &entry : before_checks)
+            constraint_tables.insert(entry.first);
+        for (auto const &entry : after_checks)
+            constraint_tables.insert(entry.first);
+
+        for (auto const &tbl : constraint_tables)
+        {
+            static const std::vector<std::string> empty_vec;
+            auto bit = before_checks.find(tbl);
+            auto ait = after_checks.find(tbl);
+            auto const &bcons = (bit != before_checks.end()) ? bit->second : empty_vec;
+            auto const &acons = (ait != after_checks.end()) ? ait->second : empty_vec;
+
+            for (auto const &con : acons)
+            {
+                if (std::find(bcons.begin(), bcons.end(), con) == bcons.end())
+                {
+                    data.push_back({tbl, "constraint_added", con});
+                }
+            }
+            for (auto const &con : bcons)
+            {
+                if (std::find(acons.begin(), acons.end(), con) == acons.end())
+                {
+                    data.push_back({tbl, "constraint_removed", con});
                 }
             }
         }

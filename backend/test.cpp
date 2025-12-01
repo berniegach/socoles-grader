@@ -31,6 +31,7 @@
 #include "test/output/delete_query_output.h"
 #include "test/grades/insert_query_grades.h"
 #include "test/grades/create_query_grades.h"
+#include "test/alter_statements.h"
 // #include "query_generator.h"
 // #include "pg_query.pb-c.h"
 //--------------------------------------------------------------------------------------------------------------
