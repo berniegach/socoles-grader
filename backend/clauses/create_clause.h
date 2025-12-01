@@ -28,6 +28,13 @@ public:
             std::vector<std::string> local_columns;
             std::string referenced_table;
             std::vector<std::string> referenced_columns;
+            std::string match_type;
+            std::string on_delete_action;
+            std::string on_update_action;
+            bool deferrable_clause_specified = false;
+            bool deferrable = false;
+            bool initially_clause_specified = false;
+            bool initially_deferred = false;
         };
         std::vector<foreign_key_constraint> foreign_key_constraints;
         std::vector<std::string> unique_constraints;
@@ -38,6 +45,9 @@ public:
     static Create_clause::create_clause_info get_info(const std::shared_ptr<AbstractSyntaxTree::Node> &node);
     static std::pair<std::string, Create_clause::create_clause_info> process(const std::shared_ptr<AbstractSyntaxTree::Node> &node);
     static Common::comparision_result compare(const create_clause_info &reference, const create_clause_info &other);
+
+private:
+    static bool parse_bool(const std::string &value, bool &out);
 };
 
 #endif // CREATE_CLAUSE_H

@@ -407,3 +407,25 @@ BOOST_AUTO_TEST_CASE(create_test_case_19)
     BOOST_CHECK_NE(cmp_info.message.find("2000"), std::string::npos);
     BOOST_CHECK_NE(cmp_info.message.find("4000"), std::string::npos);
 }
+
+BOOST_AUTO_TEST_CASE(create_test_case_20)
+{
+    std::cout << "Test case 20: CREATE TABLE with differing FK actions and deferrability" << std::endl;
+    ModelQuery model_query("20",
+                           "CREATE TABLE Borrow( copy_id INT, student_id INT, "
+                           "FOREIGN KEY (copy_id) REFERENCES Copy(serial_number) ON DELETE CASCADE ON UPDATE CASCADE DEFERRABLE INITIALLY DEFERRED );");
+    StudentQuery stu_query("20",
+                           "CREATE TABLE Borrow( copy_id INT, student_id INT, "
+                           "FOREIGN KEY (copy_id) REFERENCES Copy(serial_number) ON DELETE RESTRICT ON UPDATE NO ACTION NOT DEFERRABLE );");
+
+    model_query.create_abstract_syntax_tree();
+    stu_query.create_abstract_syntax_tree();
+
+    auto ref_ast = model_query.get_parse_tree();
+    auto stu_ast = stu_query.get_parse_tree();
+
+    Common::comparision_result cmp_info = Goals::compare_queries(ref_ast, stu_ast);
+
+    BOOST_CHECK_NE(cmp_info.message.find("ON DELETE"), std::string::npos);
+    BOOST_CHECK_NE(cmp_info.message.find("DEFERRABLE"), std::string::npos);
+}

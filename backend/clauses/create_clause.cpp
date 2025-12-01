@@ -1,6 +1,17 @@
 #include "create_clause.h"
 #include "common.h"
 #include <iostream>
+#include <algorithm>
+
+bool Create_clause::parse_bool(const std::string &value, bool &out)
+{
+    if (value.empty())
+    {
+        return false;
+    }
+    out = (value == "true" || value == "1");
+    return true;
+}
 
 Create_clause::create_clause_info Create_clause::get_info(const std::shared_ptr<AbstractSyntaxTree::Node> &node)
 {
@@ -145,6 +156,24 @@ Create_clause::create_clause_info Create_clause::get_info(const std::shared_ptr<
                                 if (child->key == "String")
                                     fk.referenced_columns.push_back(Common::strip_quotes(child->get_child("sval")->value));
                         }
+                        fk.match_type = elt->get_value("fk_matchtype");
+                        fk.on_delete_action = elt->get_value("fk_del_action");
+                        fk.on_update_action = elt->get_value("fk_upd_action");
+                        bool bool_value = false;
+                        if (parse_bool(elt->get_value("deferrable"), bool_value))
+                        {
+                            fk.deferrable_clause_specified = true;
+                            fk.deferrable = bool_value;
+                        }
+                        if (parse_bool(elt->get_value("initdeferred"), bool_value))
+                        {
+                            fk.initially_clause_specified = true;
+                            fk.initially_deferred = bool_value;
+                        }
+                        if (fk.deferrable && !fk.initially_clause_specified)
+                        {
+                            fk.initially_deferred = true;
+                        }
                         info.foreign_key_constraints.push_back(fk);
                     }
                     else if (contype == "CONSTR_UNIQUE")
@@ -256,6 +285,33 @@ std::pair<std::string, Create_clause::create_clause_info> Create_clause::process
                         oss << ", ";
                 }
                 oss << ")";
+                if (!fk.match_type.empty())
+                {
+                    oss << " MATCH " << fk.match_type;
+                }
+                if (!fk.on_delete_action.empty())
+                {
+                    oss << " ON DELETE " << fk.on_delete_action;
+                }
+                if (!fk.on_update_action.empty())
+                {
+                    oss << " ON UPDATE " << fk.on_update_action;
+                }
+                if (fk.deferrable_clause_specified)
+                {
+                    if (fk.deferrable)
+                    {
+                        oss << " DEFERRABLE";
+                        if (fk.initially_clause_specified)
+                        {
+                            oss << " INITIALLY " << (fk.initially_deferred ? "DEFERRED" : "IMMEDIATE");
+                        }
+                    }
+                    else
+                    {
+                        oss << " NOT DEFERRABLE";
+                    }
+                }
                 if (i < info.foreign_key_constraints.size() - 1)
                     oss << "; ";
             }
@@ -298,6 +354,66 @@ Common::comparision_result Create_clause::compare(const create_clause_info &refe
     std::vector<std::string> incorrect_parts;
     std::vector<std::string> next_steps;
     std::ostringstream message;
+
+    // Helper lambdas for phrasing
+    auto action_phrase = [](const std::string &action)
+    {
+        if (action.empty())
+        {
+            return std::string("<unspecified>");
+        }
+        if (action == "a")
+        {
+            return std::string("NO ACTION");
+        }
+        if (action == "r")
+        {
+            return std::string("RESTRICT");
+        }
+        if (action == "c")
+        {
+            return std::string("CASCADE");
+        }
+        if (action == "n")
+        {
+            return std::string("SET NULL");
+        }
+        if (action == "d")
+        {
+            return std::string("SET DEFAULT");
+        }
+        return action;
+    };
+    auto match_phrase = [](const std::string &match_type)
+    {
+        if (match_type.empty())
+        {
+            return std::string("<unspecified>");
+        }
+        if (match_type == "s")
+        {
+            return std::string("SIMPLE");
+        }
+        if (match_type == "f")
+        {
+            return std::string("FULL");
+        }
+        if (match_type == "p")
+        {
+            return std::string("PARTIAL");
+        }
+        return match_type;
+    };
+    auto deferrability_phrase = [](const create_clause_info::foreign_key_constraint &fk)
+    {
+        if (!fk.deferrable)
+        {
+            return std::string("NOT DEFERRABLE");
+        }
+        std::string phrase = "DEFERRABLE";
+        phrase += fk.initially_deferred ? " INITIALLY DEFERRED" : " INITIALLY IMMEDIATE";
+        return phrase;
+    };
 
     // --- Compare table (object) name ---
     if (reference.object_name == other.object_name)
@@ -493,6 +609,48 @@ Common::comparision_result Create_clause::compare(const create_clause_info &refe
                             << Where_clause::join_elements_to_str(ref_fk.referenced_columns, ", ")
                             << ") but found: (" << Where_clause::join_elements_to_str(stu_fk.referenced_columns, ", ") << ").\n";
                     next_steps.push_back("💡Adjust the referenced columns in your FOREIGN KEY definition " + std::to_string(i + 1) + ".");
+                    check_ok = false;
+                    equal = false;
+                }
+                if (ref_fk.match_type != stu_fk.match_type)
+                {
+                    incorrect_parts.push_back("Foreign keys");
+                    message << "● For FOREIGN KEY constraint " << (i + 1) << ", expected MATCH "
+                            << match_phrase(ref_fk.match_type) << " but found MATCH "
+                            << match_phrase(stu_fk.match_type) << ".\n";
+                    next_steps.push_back("💡Use MATCH " + match_phrase(ref_fk.match_type) + " for FOREIGN KEY " + std::to_string(i + 1) + ".");
+                    check_ok = false;
+                    equal = false;
+                }
+                if (ref_fk.on_delete_action != stu_fk.on_delete_action)
+                {
+                    incorrect_parts.push_back("Foreign keys");
+                    message << "● For FOREIGN KEY constraint " << (i + 1) << ", expected ON DELETE "
+                            << action_phrase(ref_fk.on_delete_action) << " but found ON DELETE "
+                            << action_phrase(stu_fk.on_delete_action) << ".\n";
+                    next_steps.push_back("💡Update the ON DELETE action for FOREIGN KEY " + std::to_string(i + 1) + ".");
+                    check_ok = false;
+                    equal = false;
+                }
+                if (ref_fk.on_update_action != stu_fk.on_update_action)
+                {
+                    incorrect_parts.push_back("Foreign keys");
+                    message << "● For FOREIGN KEY constraint " << (i + 1) << ", expected ON UPDATE "
+                            << action_phrase(ref_fk.on_update_action) << " but found ON UPDATE "
+                            << action_phrase(stu_fk.on_update_action) << ".\n";
+                    next_steps.push_back("💡Update the ON UPDATE action for FOREIGN KEY " + std::to_string(i + 1) + ".");
+                    check_ok = false;
+                    equal = false;
+                }
+                bool deferrability_differs = (ref_fk.deferrable != stu_fk.deferrable) ||
+                                             (ref_fk.deferrable && stu_fk.deferrable && (ref_fk.initially_deferred != stu_fk.initially_deferred));
+                if (deferrability_differs)
+                {
+                    incorrect_parts.push_back("Foreign keys");
+                    message << "● For FOREIGN KEY constraint " << (i + 1) << ", expected "
+                            << deferrability_phrase(ref_fk) << " but found "
+                            << deferrability_phrase(stu_fk) << ".\n";
+                    next_steps.push_back("💡Adjust the DEFERRABLE clause for FOREIGN KEY " + std::to_string(i + 1) + ".");
                     check_ok = false;
                     equal = false;
                 }
