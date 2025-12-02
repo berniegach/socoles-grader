@@ -2,7 +2,59 @@
 #include "common.h"
 #include <iostream>
 #include <algorithm>
+#include <set>
+#include <sstream>
+#include <map>
 
+std::string Create_clause::fk_action_phrase(const std::string &action)
+{
+    if (action.empty())
+    {
+        return std::string("<unspecified>");
+    }
+    if (action == "a")
+    {
+        return std::string("NO ACTION");
+    }
+    if (action == "r")
+    {
+        return std::string("RESTRICT");
+    }
+    if (action == "c")
+    {
+        return std::string("CASCADE");
+    }
+    if (action == "n")
+    {
+        return std::string("SET NULL");
+    }
+    if (action == "d")
+    {
+        return std::string("SET DEFAULT");
+    }
+    return action;
+}
+
+std::string Create_clause::fk_match_phrase(const std::string &match_type)
+{
+    if (match_type.empty())
+    {
+        return std::string("<unspecified>");
+    }
+    if (match_type == "s")
+    {
+        return std::string("SIMPLE");
+    }
+    if (match_type == "f")
+    {
+        return std::string("FULL");
+    }
+    if (match_type == "p")
+    {
+        return std::string("PARTIAL");
+    }
+    return match_type;
+}
 bool Create_clause::parse_bool(const std::string &value, bool &out)
 {
     if (value.empty())
@@ -287,15 +339,15 @@ std::pair<std::string, Create_clause::create_clause_info> Create_clause::process
                 oss << ")";
                 if (!fk.match_type.empty())
                 {
-                    oss << " MATCH " << fk.match_type;
+                    oss << " MATCH " << Create_clause::fk_match_phrase(fk.match_type);
                 }
                 if (!fk.on_delete_action.empty())
                 {
-                    oss << " ON DELETE " << fk.on_delete_action;
+                    oss << " ON DELETE " << Create_clause::fk_action_phrase(fk.on_delete_action);
                 }
                 if (!fk.on_update_action.empty())
                 {
-                    oss << " ON UPDATE " << fk.on_update_action;
+                    oss << " ON UPDATE " << Create_clause::fk_action_phrase(fk.on_update_action);
                 }
                 if (fk.deferrable_clause_specified)
                 {
@@ -355,55 +407,6 @@ Common::comparision_result Create_clause::compare(const create_clause_info &refe
     std::vector<std::string> next_steps;
     std::ostringstream message;
 
-    // Helper lambdas for phrasing
-    auto action_phrase = [](const std::string &action)
-    {
-        if (action.empty())
-        {
-            return std::string("<unspecified>");
-        }
-        if (action == "a")
-        {
-            return std::string("NO ACTION");
-        }
-        if (action == "r")
-        {
-            return std::string("RESTRICT");
-        }
-        if (action == "c")
-        {
-            return std::string("CASCADE");
-        }
-        if (action == "n")
-        {
-            return std::string("SET NULL");
-        }
-        if (action == "d")
-        {
-            return std::string("SET DEFAULT");
-        }
-        return action;
-    };
-    auto match_phrase = [](const std::string &match_type)
-    {
-        if (match_type.empty())
-        {
-            return std::string("<unspecified>");
-        }
-        if (match_type == "s")
-        {
-            return std::string("SIMPLE");
-        }
-        if (match_type == "f")
-        {
-            return std::string("FULL");
-        }
-        if (match_type == "p")
-        {
-            return std::string("PARTIAL");
-        }
-        return match_type;
-    };
     auto deferrability_phrase = [](const create_clause_info::foreign_key_constraint &fk)
     {
         if (!fk.deferrable)
@@ -616,9 +619,9 @@ Common::comparision_result Create_clause::compare(const create_clause_info &refe
                 {
                     incorrect_parts.push_back("Foreign keys");
                     message << "● For FOREIGN KEY constraint " << (i + 1) << ", expected MATCH "
-                            << match_phrase(ref_fk.match_type) << " but found MATCH "
-                            << match_phrase(stu_fk.match_type) << ".\n";
-                    next_steps.push_back("💡Use MATCH " + match_phrase(ref_fk.match_type) + " for FOREIGN KEY " + std::to_string(i + 1) + ".");
+                            << Create_clause::fk_match_phrase(ref_fk.match_type) << " but found MATCH "
+                            << Create_clause::fk_match_phrase(stu_fk.match_type) << ".\n";
+                    next_steps.push_back("💡Use MATCH " + Create_clause::fk_match_phrase(ref_fk.match_type) + " for FOREIGN KEY " + std::to_string(i + 1) + ".");
                     check_ok = false;
                     equal = false;
                 }
@@ -626,8 +629,8 @@ Common::comparision_result Create_clause::compare(const create_clause_info &refe
                 {
                     incorrect_parts.push_back("Foreign keys");
                     message << "● For FOREIGN KEY constraint " << (i + 1) << ", expected ON DELETE "
-                            << action_phrase(ref_fk.on_delete_action) << " but found ON DELETE "
-                            << action_phrase(stu_fk.on_delete_action) << ".\n";
+                            << Create_clause::fk_action_phrase(ref_fk.on_delete_action) << " but found ON DELETE "
+                            << Create_clause::fk_action_phrase(stu_fk.on_delete_action) << ".\n";
                     next_steps.push_back("💡Update the ON DELETE action for FOREIGN KEY " + std::to_string(i + 1) + ".");
                     check_ok = false;
                     equal = false;
@@ -636,8 +639,8 @@ Common::comparision_result Create_clause::compare(const create_clause_info &refe
                 {
                     incorrect_parts.push_back("Foreign keys");
                     message << "● For FOREIGN KEY constraint " << (i + 1) << ", expected ON UPDATE "
-                            << action_phrase(ref_fk.on_update_action) << " but found ON UPDATE "
-                            << action_phrase(stu_fk.on_update_action) << ".\n";
+                            << Create_clause::fk_action_phrase(ref_fk.on_update_action) << " but found ON UPDATE "
+                            << Create_clause::fk_action_phrase(stu_fk.on_update_action) << ".\n";
                     next_steps.push_back("💡Update the ON UPDATE action for FOREIGN KEY " + std::to_string(i + 1) + ".");
                     check_ok = false;
                     equal = false;

@@ -48,6 +48,9 @@ public:
 
 private:
     static bool parse_bool(const std::string &value, bool &out);
+    // Helper translators for FK phrases
+    static std::string fk_action_phrase(const std::string &action);
+    static std::string fk_match_phrase(const std::string &match_type);
 };
 
 #endif // CREATE_CLAUSE_H
