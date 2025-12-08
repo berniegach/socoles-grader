@@ -95,6 +95,18 @@ MyPostgres::execute_query_not_select(const std::string &query, std::string &erro
             }
         }
 
+        // Capture view definitions before executing the query
+        std::map<std::string, std::string> before_views;
+        {
+            auto res = tx.exec(
+                "SELECT viewname, definition FROM pg_catalog.pg_views "
+                "WHERE schemaname='public';");
+            for (auto const &row : res)
+            {
+                before_views[row[0].c_str()] = row[1].c_str();
+            }
+        }
+
         // 2) Snapshot full data before (bounded)
         std::map<std::string, std::vector<std::vector<std::string>>> before_state;
         for (auto const &tbl : before_tables)
@@ -239,6 +251,18 @@ MyPostgres::execute_query_not_select(const std::string &query, std::string &erro
             for (auto const &r : tbls)
             {
                 after_tables.push_back(r[0].c_str());
+            }
+        }
+
+        // Capture view definitions after executing the query
+        std::map<std::string, std::string> after_views;
+        {
+            auto res = tx.exec(
+                "SELECT viewname, definition FROM pg_catalog.pg_views "
+                "WHERE schemaname='public';");
+            for (auto const &row : res)
+            {
+                after_views[row[0].c_str()] = row[1].c_str();
             }
         }
 
@@ -493,6 +517,39 @@ MyPostgres::execute_query_not_select(const std::string &query, std::string &erro
                 {
                     data.push_back({tbl, "constraint_removed", con});
                 }
+            }
+        }
+
+        // 8e) View changes
+        std::set<std::string> view_names;
+        for (auto const &entry : before_views)
+        {
+            view_names.insert(entry.first);
+        }
+        for (auto const &entry : after_views)
+        {
+            view_names.insert(entry.first);
+        }
+
+        for (auto const &view_name : view_names)
+        {
+            auto b_it = before_views.find(view_name);
+            auto a_it = after_views.find(view_name);
+            bool existed_before = b_it != before_views.end();
+            bool exists_after = a_it != after_views.end();
+
+            if (!existed_before && exists_after)
+            {
+                data.push_back({view_name, "view_created", a_it->second});
+            }
+            else if (existed_before && !exists_after)
+            {
+                data.push_back({view_name, "view_dropped", b_it->second});
+            }
+            else if (existed_before && exists_after && b_it->second != a_it->second)
+            {
+                std::string change_info = "expected: " + b_it->second + " | got: " + a_it->second;
+                data.push_back({view_name, "view_changed", change_info});
             }
         }
     }

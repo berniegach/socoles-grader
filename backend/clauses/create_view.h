@@ -8,6 +8,7 @@
 #include "common.h"
 #include "select/select_clause.h"
 #include "select/from_clause.h"
+#include "select/where_clause.h"
 
 class Create_view
 {
@@ -16,9 +17,16 @@ public:
     {
         std::string view_name;       // The name of the view.
         std::string view_definition; // A normalized string representation of the SELECT query.
-        // Detailed select clause information ---
+        std::string from_definition;  // Summary of the FROM clause.
+        std::string where_definition; // Summary of the WHERE clause if present.
+        // Detailed clause information used for comparison.
         Select_clause::select_clause_info view_select_info;
+        From_clause::from_clause_info view_from_info;
+        Where_clause::where_clause_info view_where_info;
         bool if_not_exists = false;
+        bool has_where_clause = false;
+        bool with_check_option = false;
+        std::string check_option_type; // e.g., "LOCAL" or "CASCADED"
     };
 
     // Extracts view information from the AST node.

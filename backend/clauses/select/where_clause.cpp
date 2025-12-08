@@ -3,6 +3,7 @@
 #include "select_clause.h"
 #include <iostream>
 #include <set>
+#include <sstream>
 
 std::string Where_clause::extract_constant(const std::shared_ptr<AbstractSyntaxTree::Node> &const_node)
 {
@@ -120,8 +121,8 @@ std::string Where_clause::extract_expression(const std::shared_ptr<AbstractSynta
     }
     else if (expr_node->key == "SubLink")
     {
-        // Handle subqueries
-        return "(subquery)";
+        // Handle subqueries by returning a descriptive string of the subquery itself
+        return describe_subquery(expr_node->get_child("subselect"));
     }
     else if (expr_node->key == "CollateClause")
     {
@@ -350,7 +351,7 @@ std::shared_ptr<Where_clause::ConditionNode> Where_clause::extract_condition(con
         // Handle subqueries
         std::string sublink_type = expr_node->get_value("subLinkType");
         auto subselect_node = expr_node->get_child("subselect");
-        std::string subquery = "(subquery)";
+        std::string subquery = describe_subquery(subselect_node);
         std::string operator_;
         if (sublink_type == "EXISTS_SUBLINK")
         {
@@ -660,6 +661,76 @@ std::string Where_clause::generate_condition_signature(const std::shared_ptr<Whe
         }
     }
     return "";
+}
+
+std::string Where_clause::describe_subquery(const std::shared_ptr<AbstractSyntaxTree::Node> &subselect_node)
+{
+    if (!subselect_node)
+    {
+        return "(subquery)";
+    }
+
+    std::shared_ptr<AbstractSyntaxTree::Node> select_stmt_node = subselect_node;
+    if (select_stmt_node && select_stmt_node->key != "SelectStmt")
+    {
+        select_stmt_node = subselect_node->get_child("SelectStmt");
+    }
+
+    if (!select_stmt_node)
+    {
+        return "(subquery)";
+    }
+
+    From_clause::from_clause_info sub_from_info;
+    std::string from_sentence;
+
+    auto from_clause_node = select_stmt_node->get_child("fromClause");
+    if (from_clause_node)
+    {
+        auto from_result = From_clause::process(from_clause_node);
+        from_sentence = from_result.first;
+        sub_from_info = from_result.second;
+    }
+
+    auto select_result = Select_clause::process(select_stmt_node, sub_from_info);
+    const std::string &select_sentence = select_result.first;
+    Select_clause::select_clause_info sub_select_info = select_result.second;
+
+    std::string where_sentence;
+    auto where_clause_node = select_stmt_node->get_child("whereClause");
+    if (where_clause_node)
+    {
+        auto where_result = Where_clause::process(where_clause_node, sub_from_info, sub_select_info);
+        where_sentence = where_result.first;
+    }
+
+    std::ostringstream oss;
+    oss << "(";
+    if (!select_sentence.empty())
+    {
+        oss << select_sentence;
+    }
+
+    if (!from_sentence.empty())
+    {
+        if (!select_sentence.empty())
+        {
+            oss << " ";
+        }
+        oss << from_sentence;
+    }
+
+    if (!where_sentence.empty())
+    {
+        if (!select_sentence.empty() || !from_sentence.empty())
+        {
+            oss << " ";
+        }
+        oss << where_sentence;
+    }
+
+    oss << ")";
+    return oss.str();
 }
 std::string Where_clause::condition_type_to_string(Where_clause::ConditionType type)
 {

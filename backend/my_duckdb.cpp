@@ -189,7 +189,7 @@ std::vector<std::vector<std::string>> MyDuckDB::execute_query_not_select(const s
 
     // Get list of tables before
     std::vector<std::string> before_tables;
-    auto before_tables_result = con.Query("SHOW TABLES;");
+    auto before_tables_result = con.Query("SELECT table_name FROM information_schema.tables WHERE table_type='BASE TABLE' AND table_schema='main';");
     if (before_tables_result->HasError())
     {
         error = before_tables_result->GetError();
@@ -198,6 +198,19 @@ std::vector<std::vector<std::string>> MyDuckDB::execute_query_not_select(const s
     for (int row = 0; row < before_tables_result->RowCount(); row++)
     {
         before_tables.push_back(before_tables_result->GetValue(0, row).ToString());
+    }
+
+    // Capture view definitions before executing the query
+    std::map<std::string, std::string> before_views;
+    {
+        auto res = con.Query("SELECT table_name, view_definition FROM information_schema.views WHERE table_schema='main';");
+        if (!res->HasError())
+        {
+            for (int r = 0; r < res->RowCount(); r++)
+            {
+                before_views[res->GetValue(0, r).ToString()] = res->GetValue(1, r).ToString();
+            }
+        }
     }
 
     // Capture full table data before (bounded)
@@ -337,7 +350,7 @@ std::vector<std::vector<std::string>> MyDuckDB::execute_query_not_select(const s
 
     // 6) Get list of tables after
     std::vector<std::string> after_tables;
-    auto after_tables_result = con.Query("SHOW TABLES;");
+    auto after_tables_result = con.Query("SELECT table_name FROM information_schema.tables WHERE table_type='BASE TABLE' AND table_schema='main';");
     if (after_tables_result->HasError())
     {
         error = after_tables_result->GetError();
@@ -346,6 +359,19 @@ std::vector<std::vector<std::string>> MyDuckDB::execute_query_not_select(const s
     for (int row = 0; row < after_tables_result->RowCount(); row++)
     {
         after_tables.push_back(after_tables_result->GetValue(0, row).ToString());
+    }
+
+    // Capture view definitions after executing the query
+    std::map<std::string, std::string> after_views;
+    {
+        auto res = con.Query("SELECT table_name, view_definition FROM information_schema.views WHERE table_schema='main';");
+        if (!res->HasError())
+        {
+            for (int r = 0; r < res->RowCount(); r++)
+            {
+                after_views[res->GetValue(0, r).ToString()] = res->GetValue(1, r).ToString();
+            }
+        }
     }
 
     // 7) Capture full table data after (bounded)
@@ -595,6 +621,35 @@ std::vector<std::vector<std::string>> MyDuckDB::execute_query_not_select(const s
         }
     }
 
+    // 13) Detect view changes
+    std::set<std::string> view_names;
+    for (auto &entry : before_views)
+        view_names.insert(entry.first);
+    for (auto &entry : after_views)
+        view_names.insert(entry.first);
+
+    for (auto &view_name : view_names)
+    {
+        auto b_it = before_views.find(view_name);
+        auto a_it = after_views.find(view_name);
+        bool had_view = b_it != before_views.end();
+        bool has_view = a_it != after_views.end();
+
+        if (!had_view && has_view)
+        {
+            data.push_back({view_name, "view_created", a_it->second});
+        }
+        else if (had_view && !has_view)
+        {
+            data.push_back({view_name, "view_dropped", b_it->second});
+        }
+        else if (had_view && has_view && b_it->second != a_it->second)
+        {
+            std::string info = "expected: " + b_it->second + " | got: " + a_it->second;
+            data.push_back({view_name, "view_changed", info});
+        }
+    }
+
     if (transaction_started)
     {
         con.Rollback();
@@ -643,6 +698,11 @@ Common::comparision_result MyDuckDB::compare(const results_info &ref, const resu
                 msg << "❌ You forgot to create the table '" << r.table << "'.\n";
                 comp.next_steps.push_back("Add: CREATE TABLE " + r.table + " ...;");
             }
+            else if (r.op == "table_created")
+            {
+                msg << "❌ You did not create the table structure for '" << r.table << "'.\n";
+                comp.next_steps.push_back("Ensure the table " + r.table + " exists with the correct columns.");
+            }
             else if (r.op == "column_added")
             {
                 msg << "❌ You did not add the column '" << r.info
@@ -678,6 +738,21 @@ Common::comparision_result MyDuckDB::compare(const results_info &ref, const resu
                 msg << "❌ You did not drop the constraint on '" << r.table
                     << "': " << r.info << ".\n";
                 comp.next_steps.push_back("ALTER TABLE " + r.table + " DROP CONSTRAINT ...");
+            }
+            else if (r.op == "view_created")
+            {
+                msg << "❌ You did not create the view '" << r.table << "'.\n";
+                comp.next_steps.push_back("CREATE VIEW " + r.table + " AS ...;");
+            }
+            else if (r.op == "view_dropped")
+            {
+                msg << "❌ You did not drop the view '" << r.table << "'.\n";
+                comp.next_steps.push_back("DROP VIEW " + r.table + ";");
+            }
+            else if (r.op == "view_changed")
+            {
+                msg << "❌ The definition of view '" << r.table << "' does not match the expected definition.\n";
+                comp.next_steps.push_back("Adjust the CREATE OR REPLACE VIEW statement for " + r.table + ".");
             }
             if (r.table == "constraint error")
             {
@@ -721,6 +796,11 @@ Common::comparision_result MyDuckDB::compare(const results_info &ref, const resu
                 msg << "⚠️ You created an extra table '" << s.table << "' that wasn’t needed.\n";
                 comp.next_steps.push_back("Remove: DROP TABLE " + s.table + ";");
             }
+            else if (s.op == "table_created")
+            {
+                msg << "⚠️ You defined an unexpected table structure for '" << s.table << "'.\n";
+                comp.next_steps.push_back("Drop or ignore the extra table definition for " + s.table + ".");
+            }
             else if (s.op == "column_added")
             {
                 msg << "⚠️ You added an unnecessary column '" << s.info
@@ -750,6 +830,21 @@ Common::comparision_result MyDuckDB::compare(const results_info &ref, const resu
                 msg << "⚠️ You removed a constraint from '" << s.table
                     << "' that should stay: " << s.info << ".\n";
                 comp.next_steps.push_back("Recreate the constraint on " + s.table + ".");
+            }
+            else if (s.op == "view_created")
+            {
+                msg << "⚠️ You created an extra view '" << s.table << "'.\n";
+                comp.next_steps.push_back("DROP VIEW " + s.table + ";");
+            }
+            else if (s.op == "view_dropped")
+            {
+                msg << "⚠️ You dropped the view '" << s.table << "' but it should remain.\n";
+                comp.next_steps.push_back("Recreate the view " + s.table + ".");
+            }
+            else if (s.op == "view_changed")
+            {
+                msg << "⚠️ The definition of view '" << s.table << "' differs from expected.\n";
+                comp.next_steps.push_back("Revert or adjust the CREATE VIEW statement for " + s.table + ".");
             }
             else if (s.op == "removed")
             {

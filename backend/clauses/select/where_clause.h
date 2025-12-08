@@ -1,6 +1,7 @@
 #ifndef WHERE_CLAUSE_H
 #define WHERE_CLAUSE_H
 
+#include <memory>
 #include <string>
 #include "../../abstract_syntax_tree.h"
 #include "select_clause.h"
@@ -132,6 +133,12 @@ public:
      * @return: A string containing the normalized signature of the condition node
      */
     static std::string generate_condition_signature(const std::shared_ptr<Where_clause::ConditionNode> &node);
+
+    /**
+     * Helper that produces a normalized textual description of a subquery, used when
+     * comparing correlated subselects so that literal differences are preserved.
+     */
+    static std::string describe_subquery(const std::shared_ptr<AbstractSyntaxTree::Node> &subselect_node);
 
 private:
     static std::string condition_type_to_string(Where_clause::ConditionType type);
