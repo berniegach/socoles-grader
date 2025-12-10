@@ -1,17 +1,18 @@
 'use client';
 import { useEffect, useState, useRef, useMemo } from 'react';
-import { Box, Button, Card, CardContent, Chip, LinearProgress, Snackbar, Alert, Table, TableBody, TableCell, TableHead, TableRow, TextField, Stack, IconButton, Tooltip, Typography, Switch, FormControlLabel } from '@mui/material';
+import { Box, Button, Chip, Snackbar, Alert, Table, TableBody, TableCell, TableHead, TableRow, TextField, Stack, IconButton, Tooltip, Typography, Switch, FormControlLabel } from '@mui/material';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import DeleteIcon from '@mui/icons-material/Delete';
 import LinkIcon from '@mui/icons-material/Link';
 import CancelIcon from '@mui/icons-material/CancelOutlined';
+import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import Papa from 'papaparse';
 import PageCard from '@/components/PageCard';
 import HeaderActions from '@/components/HeaderActions';
 import { useAuth } from '@/features/auth/AuthProvider';
-import type { RosterEntry, InviteResponse } from '@/lib/types';
+import type { RosterEntry, InviteResponse, Assignment, Submission } from '@/lib/types';
 
 export default function ClassRoster() {
     const { authFetch, user } = useAuth();
@@ -29,6 +30,7 @@ export default function ClassRoster() {
     const [showRemoved, setShowRemoved] = useState(false);
     // Map rosterId -> latest invite (to surface expiry state)
     const [invitesByRoster, setInvitesByRoster] = useState<Record<string, InviteResponse>>({});
+    const [exportingCsv, setExportingCsv] = useState(false);
 
     const rowsToShow = useMemo(() => {
         const q = search.trim().toLowerCase();
@@ -241,6 +243,106 @@ export default function ClassRoster() {
         }
     }
 
+    async function exportRosterCsv() {
+        if (exportingCsv) return;
+        if (!user?.token) { setErr('You are not authenticated.'); return; }
+        try {
+            setExportingCsv(true);
+            setErr('');
+            const [assignmentsRes, submissionsRes] = await Promise.all([
+                authFetch('/api/assignments'),
+                authFetch('/api/submissions')
+            ]);
+            if (!assignmentsRes.ok) throw new Error('Failed to load assignments');
+            if (!submissionsRes.ok) throw new Error('Failed to load submissions');
+            const assignmentsJson: unknown = await assignmentsRes.json();
+            const submissionsJson: unknown = await submissionsRes.json();
+            const assignmentsList = (Array.isArray(assignmentsJson) ? assignmentsJson : []) as Assignment[];
+            const publishedAssignments = assignmentsList.filter((a) => a && a.id && a.published !== false);
+            const activeAssignments = publishedAssignments.length ? publishedAssignments : assignmentsList.filter((a) => a && a.id);
+            const assignmentLookup = new Map<string, Assignment>();
+            activeAssignments.forEach((assignment) => { if (assignment?.id) assignmentLookup.set(String(assignment.id), assignment); });
+            const assignmentIds = Array.from(assignmentLookup.keys());
+            const submissionsList = (Array.isArray(submissionsJson) ? submissionsJson : []) as Submission[];
+            const attemptedByStudent = new Map<string, Set<string>>();
+            const completedByStudent = new Map<string, Set<string>>();
+            submissionsList.forEach((submission) => {
+                const studentKey = typeof submission?.student === 'string' ? submission.student.trim().toLowerCase() : '';
+                const assignmentId = submission?.assignmentId ? String(submission.assignmentId) : '';
+                if (!studentKey || !assignmentId || !assignmentLookup.has(assignmentId)) return;
+                if (!attemptedByStudent.has(studentKey)) attemptedByStudent.set(studentKey, new Set());
+                attemptedByStudent.get(studentKey)!.add(assignmentId);
+                const hasGrade = typeof submission?.grade === 'number' && Number.isFinite(submission.grade);
+                if (hasGrade) {
+                    if (!completedByStudent.has(studentKey)) completedByStudent.set(studentKey, new Set());
+                    completedByStudent.get(studentKey)!.add(assignmentId);
+                }
+            });
+
+            const totalAssignments = assignmentIds.length;
+            const dataset = rows.map((entry) => {
+                const studentKey = (entry.email || '').trim().toLowerCase();
+                const attemptedSet = attemptedByStudent.get(studentKey) || new Set<string>();
+                const completedSet = completedByStudent.get(studentKey) || new Set<string>();
+                const attemptedIds = Array.from(attemptedSet);
+                const completedIds = Array.from(completedSet);
+                const completedTitles = completedIds.map((id) => assignmentLookup.get(id)?.title || id);
+                const attemptedInProgressTitles = attemptedIds
+                    .filter((id) => !completedSet.has(id))
+                    .map((id) => assignmentLookup.get(id)?.title || id);
+                const missingAssignments = totalAssignments
+                    ? assignmentIds.filter((id) => !completedSet.has(id))
+                    : [];
+                const missingTitles = missingAssignments.map((id) => assignmentLookup.get(id)?.title || id);
+                const completionRate = totalAssignments ? ((completedSet.size / totalAssignments) * 100).toFixed(1) : 'N/A';
+                const missingCount = totalAssignments ? totalAssignments - completedSet.size : 0;
+                const overallStatus = totalAssignments === 0
+                    ? 'No assignments'
+                    : completedSet.size === totalAssignments
+                        ? 'Complete'
+                        : completedSet.size > 0
+                            ? 'Partial'
+                            : 'No submissions';
+                return {
+                    Name: entry.name || '',
+                    Email: entry.email || '',
+                    'Roster Status': entry.status || 'Unknown',
+                    'Assignments Published': totalAssignments,
+                    'Assignments Attempted': attemptedSet.size,
+                    'Assignments Completed': completedSet.size,
+                    'Assignments Missing': missingCount,
+                    'Completion Rate (%)': completionRate,
+                    'Overall Progress': overallStatus,
+                    'Completed Assignments': completedTitles.join('; '),
+                    'Assignments In Progress': attemptedInProgressTitles.join('; '),
+                    'Missing Assignments': missingTitles.join('; '),
+                };
+            });
+
+            if (!dataset.length) {
+                setErr('No roster entries to export.');
+                return;
+            }
+
+            const csv = Papa.unparse(dataset);
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            const dateLabel = new Date().toISOString().split('T')[0];
+            link.href = url;
+            link.setAttribute('download', `roster-progress-${dateLabel}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+            setNote('Roster progress exported');
+        } catch (e: any) {
+            setErr(e?.message || 'Failed to export roster progress');
+        } finally {
+            setExportingCsv(false);
+        }
+    }
+
     const isInstructor = user?.role === 'instructor';
     const isTA = user?.role === 'student' && !!user?.evaluator;
     const headerActions = (
@@ -255,13 +357,21 @@ export default function ClassRoster() {
                         icon: <UploadFileIcon fontSize='small' />,
                         onClick: () => { /* trigger hidden input */ inputRef.current?.click(); },
                     }] : []),
+                    ...(isInstructor ? [{
+                        key: 'export',
+                        label: exportingCsv ? 'Exporting…' : 'Export CSV',
+                        ariaLabel: 'Export roster progress CSV',
+                        icon: <FileDownloadIcon fontSize='small' />,
+                        onClick: () => exportRosterCsv(),
+                        disabled: busy || exportingCsv || rows.length === 0,
+                    }] : []),
                     {
                         key: 'refresh',
                         ariaLabel: 'Refresh roster',
                         label: 'Refresh',
                         icon: <RefreshIcon fontSize='small' />,
                         onClick: () => load(),
-                        disabled: busy,
+                        disabled: busy || exportingCsv,
                     }
                 ]}
             />
@@ -270,7 +380,7 @@ export default function ClassRoster() {
     );
 
     return (
-        <PageCard headerTitle='Class Roster' headerProps={{ height: 56 }} headerActions={headerActions} headerActionsVariant='plain' loadingProgress={busy}>
+        <PageCard headerTitle='Class Roster' headerProps={{ height: 56 }} headerActions={headerActions} headerActionsVariant='plain' loadingProgress={busy || exportingCsv}>
             <Box sx={{ p: { xs: 1.5, md: 2 } }}>
                 {(isInstructor || isTA) && (
                     <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} alignItems={{ xs: 'stretch', sm: 'flex-end' }} sx={{ mb: 2 }}>
