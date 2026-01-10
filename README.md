@@ -1,33 +1,24 @@
-# SOCOLES-Grader
+# SOCOLES
 
-SOCOLES is a C++ powered SQL auto-grader with a TypeScript frontend
-
-## Components
-
-- **backend/** - C++ server engine that grades queries  
-- **frontend/** - Typescript app for submitting queries & viewing results  
-
-> For detailed build & run instructions, see the [backend README](backend/README.md) and [frontend README](frontend/README.md).
+SOCOLES is an automated grading system for evaluating SQL statements. It can evaluate Data Query Language (SELECT), Data Definition Language (DDL), and Data Manipulation Language (DML) statements. The system supports 3 types of users:
+  - Students
+  - Instructors
+  - Teaching Assistants 
 
 ## ✨ Features
-
-- **SELECT statements**
-  Capable of grading SELECT (DQL) Queries.
-
-- **DDL/DML statements**  
-  Extends grading beyond SELECT (DQL) to include Data Definition (CREATE, ALTER, DROP) and Data Manipulation (INSERT, UPDATE, DELETE) statements.
-
-- **Clause-level Analysis**  
-  Evaluates each individual clause (e.g. `SELECT`, `FROM`, `WHERE`, `GROUP BY`) in isolation, so you get fine-grained insight into query structure.
-
-- **Clause-level Feedback**  
-  Generates feedback at the clause or component level (e.g. pointing out a missing `CASCADE` in a `DROP TABLE`), helping students pinpoint exactly what went wrong.
-
-- **Static & Dynamic Analysis**  
-  *Static* checks the syntax tree against expected patterns; *dynamic* runs the query and inspects actual results for correctness.
+- **DQL, DDL and DML statements**
+  Capable of grading DQL(`SELECT`) Queries, DDL statements such as `CREATE`, `ALTER`, `DROP` and DML statements such as `INSERT`, `UPDATE`, `DELETE`.
+- **Detailed and constructive feedback**
+  Generates feedback at the clause or component level (e.g. pointing out a missing `CASCADE` in a `DROP TABLE`), helping students pinpoint exactly what went wrong. This is possible through the evaluation of each individual clause (e.g. `SELECT`, `FROM`, `WHERE`, `GROUP BY`) in isolation, to generate fine-grained feedback.
 
 - **Query Repair**  
-  Auto-corrects minor syntax and semantic mistakes (typos, missing keywords) and suggests fixes.
+  Auto-corrects minor syntax and semantic mistakes (typos, missing keywords) to help in grading malformed statements.
+
+- **Multiple Submissions**  
+  Supports multiple attempts per question, therefore a student a work on an answer until they get it right.
+
+- **Feedback-Linked Manual Review Requests**  
+   Allows students to select a specific feedback item or grade and request a manual review when they disagree with the evaluation. Both the teaching assistants and instructors can see these requests.
 
 - **Configurable Grading**  
   Instructors can tune:
@@ -36,11 +27,6 @@ SOCOLES is a C++ powered SQL auto-grader with a TypeScript frontend
   - Property priorities  
   - Text/tree-edit distance thresholds
 
-- **Correctness Levels**  
-  Supports multiple levels of correctness.
-
-- **Constraint Support**  
-  Checks and grades table constraints like `PRIMARY KEY`, `UNIQUE`, `CHECK`, and foreign keys.
 
 
 ## 🐳 Docker Quick Start
@@ -59,6 +45,7 @@ Copy `.env.example` to `.env` and edit as needed.
 Minimum required for local development:
 ```bash
 POSTGRES_PASSWORD=change-me-strong
+SOCOLES_VERSION=1.1.5
 # (optional) defaults already work for localhost
 CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
 NEXT_PUBLIC_SOCOLES_API_URL=http://localhost:5000
@@ -67,8 +54,9 @@ NEXT_PUBLIC_SOCOLES_API_URL=http://localhost:5000
 For a custom HTTPS domain:
 ```bash
 POSTGRES_PASSWORD=your-strong-password
-CORS_ORIGINS=https://socoles.example.edu
-NEXT_PUBLIC_SOCOLES_API_URL=https://socoles.example.edu
+SOCOLES_VERSION=1.1.5
+CORS_ORIGINS=https://socoles.example.edu #comma-separated, no spaces
+NEXT_PUBLIC_SOCOLES_API_URL=https://socoles.example.edu #what the browser calls
 # Internal service URL usually stays as-is for Docker:
 SOCOLES_INTERNAL_API_URL=http://backend:5000
 ```
@@ -88,85 +76,8 @@ docker compose build
 docker compose up -d
 ```
 
-You can now access the webapp at http://localhost:3000
+You can now access the webapp at http://localhost:3000 or the custom https://socoles.example.edu
 
-## 🔧 Configure for your own domain
-
-Set these in `.env` then restart with `docker compose up -d`:
-
-- `POSTGRES_PASSWORD` (required)
-- `CORS_ORIGINS` (comma-separated, no spaces): e.g., `https://socoles.theorg.cs`
-- `NEXT_PUBLIC_SOCOLES_API_URL` (what the browser calls): e.g., `https://socoles.theorg.cs`
-- `SOCOLES_INTERNAL_API_URL` (server-to-server inside Docker): usually `http://backend:5000`
-
-Backend extras:
-- `PORT` (default `5000`)
-
-
-
-## 🚀 Manual Quick Start
-If you prefer to build and run outside of Docker, follow these steps:
-
-```bash
-# 1. Clone the repo
-git clone https://github.com/berniegach/socoles-grader.git
-cd socoles-grader
-
-# 2. Build backend
-cd backend
-mkdir -p build && cd build
-cmake .. -DCMAKE_BUILD_TYPE=Release
-make
-
-# 3. Create & configure PostgreSQL database
-#    This will create an empty database named `grader` and
-#    give your current shell user ownership so the backend can connect.
-createdb grader
-psql -c "GRANT ALL PRIVILEGES ON DATABASE grader TO $(whoami);"
-
-# 4. Start backend server
-#    Note the `--db-name` now points to `grader`
-./socoles_server 
-
-# 5. Build & run frontend
-cd ../../frontend
-npm install
-npm start
-```
-
-## 📂 Grading Input Files
-
-Before you start grading, prepare and upload the following files via the frontend. The file names can be anything — what matters is that their **content matches the required structure** below.
-
----
-
-#### ✅ Reference Queries File
-
-A CSV file containing **one column without a header**. Each row is a correct SQL statement that the auto-grader will use as the “gold standard.”
-
----
-
-#### ✅ Student Queries File
-
-A CSV file with these **exact columns (including headers)**:
-
-| Column Name     | Description                                                  |
-|----------------|--------------------------------------------------------------|
-| Org Defined ID | The student’s unique ID.                                      |
-| Attempt #      | The student’s attempt number for this question.              |
-| Q #            | The question number.                                          |
-| Answer         | The student’s SQL statement submission.                       |
-| Score          | *(Empty on upload)* Will be populated by the grader.         |
-| Out Of         | Maximum points for a correct answer (default: 1).            |
-| Feedback       | *(Empty on upload)* Will contain comments or suggestions.    |
-
----
-
-#### ✅ Initialization SQL File
-
-A `.sql` script for initializing or seeding your database schema/data.
-
-For grading only DDL/DML statements (e.g., standalone `CREATE TABLE …`), this file can be left empty.
 
 
 ## 📚 Citation
@@ -176,18 +87,18 @@ If you use SOCOLES in your research, please cite it as follows:
 ```bibtex
 @software{socoles-autograder,
   author       = {Benard Wanjiru},
-  title        = {SOCOLES-Grader: An Automatic SQL Query Grading Tool},
-  version      = {v1.0.0},
+  title        = {SOCOLES: An Automatic SQL Query Grading System},
+  version      = {v1.1.5},
   url          = {https://github.com/berniegach/socoles-grader},
-  year         = {2025},
-  month        = {Jun},
+  year         = {2026},
+  month        = {Jan},
   note         = {Accessed: YYYY-MM-DD}
 }
 ```
 
 ## Publications
 
-Please also cite these publications that describe the grading methodology and evaluation:
+Feel free to check this publications that describe the grading methodology and evaluation:
 
 ```bibtex
 @InProceedings{benard:2024,
