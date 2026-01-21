@@ -3,6 +3,7 @@ backend/build/
 .vs/
 .vscode/
 .env
+.* 
 
 # legacy (to be removed)
 frontend-old/

@@ -13,7 +13,7 @@ export interface UserLite { id: string; name: string; email: string; role: Role 
 // Dataset entity
 export interface Dataset { id: string; name: string; sql: string; createdAt?: string; updatedAt?: string }
 // Assignment PATCH payload convenience
-export interface AssignmentPatch { id: string; title?: string; course?: string; points?: number; due?: string; difficulty?: string; tags?: string[]; attemptsAllowed?: number; published?: boolean }
+export interface AssignmentPatch { id: string; title?: string; points?: number; due?: string; difficulty?: string; tags?: string[]; attemptsAllowed?: number; published?: boolean }
 // Rich question detail (adds optional loaded fields)
 export interface QuestionDetail extends Question { createdAt?: string; updatedAt?: string; publishedAt?: string }
 // Submission record with related questions (flattened)
@@ -31,7 +31,7 @@ export interface AssignmentWithQuestions extends Assignment {
     }>
 }
 
-export interface NewAssignmentPayload { title: string; course: string; difficulty: string; points: number; due: string; tags: string[]; attemptsAllowed: number; published?: boolean }
+export interface NewAssignmentPayload { title: string; difficulty: string; points: number; due: string; tags: string[]; attemptsAllowed: number; published?: boolean; course?: string }
 export interface NewSubmissionPayload { student: string; assignment: string; date?: string; grade?: number; status?: string }
 
 // Options used by the instructor BatchGrader before running grading

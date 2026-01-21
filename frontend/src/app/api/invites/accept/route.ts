@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { initSchema, query, withInstructorContext } from '@/lib/db';
+import { initSchema, query, withCourseContext, withInstructorContext } from '@/lib/db';
 
 let initialized = false;
 async function ensureInit() { if (!initialized) { await initSchema(); initialized = true; } }
@@ -11,7 +11,7 @@ export async function POST(req: NextRequest) {
         const { token, studentEmail, studentName } = body || {};
         if (!token) return NextResponse.json({ error: 'token required' }, { status: 400 });
         const { rows } = await query<any>(
-            `SELECT i.id, i.owner_id as "ownerId", i.roster_id as "rosterId", i.email, i.name, i.expires_at, i.used_at
+            `SELECT i.id, i.owner_id as "ownerId", i.roster_id as "rosterId", i.course_id as "courseId", i.email, i.name, i.expires_at, i.used_at
        FROM invites i WHERE i.token=$1 LIMIT 1`,
             [String(token)]
         );
@@ -22,7 +22,10 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'invite expired' }, { status: 400 });
         }
         // Run updates within the instructor context to satisfy RLS on roster
-        await withInstructorContext(inv.ownerId, async () => {
+        const run = <T>(fn: () => Promise<T>) => inv.courseId
+            ? withCourseContext(inv.ownerId, inv.courseId, fn)
+            : withInstructorContext(inv.ownerId, fn);
+        await run(async () => {
             await query(`UPDATE roster SET status='Active' WHERE id=$1 AND owner_id = current_setting('app.current_instructor')::uuid`, [inv.rosterId]);
             await query(`UPDATE invites SET used_at=now() WHERE id=$1`, [inv.id]);
             if (studentEmail || studentName) {

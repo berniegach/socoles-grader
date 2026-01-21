@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { initSchema, query, withInstructorContext } from '@/lib/db';
+import { initSchema, query, withCourseContext, withInstructorContext } from '@/lib/db';
 import { parseAuthHeader, verifyJwt } from '@/lib/auth';
 
 let initialized = false; async function ensureInit() { if (!initialized) { await initSchema(); initialized = true; } }
@@ -19,10 +19,14 @@ export async function GET(req: NextRequest) {
         const student = searchParams.get('student');
         const scope = (searchParams.get('scope') || '').toLowerCase();
         const instructorId = payload.role === 'student' ? (payload.instructorId as string) : payload.sub;
-        return await withInstructorContext(instructorId, async () => {
+        const courseId = payload.role === 'student' ? (payload.courseId as string | undefined) : undefined;
+        const run = <T>(fn: () => Promise<T>) => courseId
+            ? withCourseContext(instructorId, courseId, fn)
+            : withInstructorContext(instructorId, fn);
+        return await run(async () => {
             const clauses: string[] = [];
-            const params: any[] = [];
-            function add(c: string, v: any) { params.push(v); clauses.push(`${c}=$${params.length}`); }
+            const params: unknown[] = [];
+            function add(c: string, v: unknown) { params.push(v); clauses.push(`${c}=$${params.length}`); }
             if (assignmentId) add('assignment_id', assignmentId);
             if (questionId) add('question_id', questionId);
             if (submissionId) add('submission_id', submissionId);
@@ -32,7 +36,7 @@ export async function GET(req: NextRequest) {
                 // Check if this student is a TA/evaluator; evaluators can view all requests
                 const meId = payload.sub as string;
                 const { rows: me } = await query<{ evaluator: boolean }>(
-                    `SELECT evaluator FROM roster WHERE id=$1 AND owner_id = current_setting('app.current_instructor')::uuid LIMIT 1`,
+                    `SELECT evaluator FROM roster WHERE id=$1 AND owner_id = current_setting('app.current_instructor')::uuid AND course_id = current_setting('app.current_course', true)::uuid LIMIT 1`,
                     [meId]
                 );
                 const isTA = !!(me.length && me[0].evaluator);
@@ -47,12 +51,14 @@ export async function GET(req: NextRequest) {
                 // Instructors can optionally filter by student
                 add('student', student);
             }
-            const where = clauses.length ? 'WHERE ' + clauses.join(' AND ') + ' AND owner_id = current_setting(\'app.current_instructor\')::uuid' : 'WHERE owner_id = current_setting(\'app.current_instructor\')::uuid';
+            const where = clauses.length
+                ? 'WHERE ' + clauses.join(' AND ') + " AND owner_id = current_setting('app.current_instructor')::uuid AND course_id = current_setting('app.current_course', true)::uuid"
+                : "WHERE owner_id = current_setting('app.current_instructor')::uuid AND course_id = current_setting('app.current_course', true)::uuid";
             const { rows } = await query(`SELECT id, assignment_id as "assignmentId", question_id as "questionId", submission_id as "submissionId", student, comment, status, instructor_reply as "instructorReply", to_char(reply_at,'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as "replyAt", to_char(created_at,'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as "createdAt", to_char(updated_at,'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as "updatedAt" FROM question_review_requests ${where} ORDER BY created_at DESC`, params);
             return NextResponse.json(rows);
         });
-    } catch (e: any) {
-        return NextResponse.json({ error: e.message || 'failed' }, { status: 500 });
+    } catch (e: unknown) {
+        return NextResponse.json({ error: (e as Error).message || 'failed' }, { status: 500 });
     }
 }
 
@@ -64,11 +70,20 @@ export async function POST(req: NextRequest) {
         if (!token) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
         const payload = verifyJwt(token);
         if (!payload) return NextResponse.json({ error: 'invalid token' }, { status: 401 });
-        const body = await req.json();
-        const { assignmentId, questionId, submissionId, student, comment } = body || {};
+        const body = await req.json().catch(() => null) as unknown;
+        const obj = body && typeof body === 'object' ? (body as Record<string, unknown>) : {};
+        const assignmentId = typeof obj.assignmentId === 'string' ? obj.assignmentId : undefined;
+        const questionId = typeof obj.questionId === 'string' ? obj.questionId : undefined;
+        const submissionId = typeof obj.submissionId === 'string' ? obj.submissionId : undefined;
+        const student = typeof obj.student === 'string' ? obj.student : undefined;
+        const comment = typeof obj.comment === 'string' ? obj.comment : undefined;
         if (!assignmentId || !questionId || !submissionId || !comment) return NextResponse.json({ error: 'assignmentId, questionId, submissionId, comment required' }, { status: 400 });
         const instructorId = payload.role === 'student' ? (payload.instructorId as string) : payload.sub;
-        return await withInstructorContext(instructorId, async () => {
+        const courseId = payload.role === 'student' ? (payload.courseId as string | undefined) : undefined;
+        const run = <T>(fn: () => Promise<T>) => courseId
+            ? withCourseContext(instructorId, courseId, fn)
+            : withInstructorContext(instructorId, fn);
+        return await run(async () => {
             const effectiveStudent = payload.role === 'student' ? payload.email : (student || '');
             if (!effectiveStudent) return NextResponse.json({ error: 'student required' }, { status: 400 });
             const { rows } = await query(`INSERT INTO question_review_requests (assignment_id, question_id, submission_id, student, comment, owner_id)
@@ -84,8 +99,8 @@ export async function POST(req: NextRequest) {
             }
             return NextResponse.json(reqRow);
         });
-    } catch (e: any) {
-        return NextResponse.json({ error: e.message || 'failed' }, { status: 500 });
+    } catch (e: unknown) {
+        return NextResponse.json({ error: (e as Error).message || 'failed' }, { status: 500 });
     }
 }
 
@@ -97,16 +112,24 @@ export async function PATCH(req: NextRequest) {
         if (!token) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
         const payload = verifyJwt(token);
         if (!payload) return NextResponse.json({ error: 'invalid token' }, { status: 401 });
-        const body = await req.json();
-        const { id, status, comment, instructorReply } = body || {};
+        const body = await req.json().catch(() => null) as unknown;
+        const obj = body && typeof body === 'object' ? (body as Record<string, unknown>) : {};
+        const id = typeof obj.id === 'string' ? obj.id : undefined;
+        const status = typeof obj.status === 'string' ? obj.status : undefined;
+        const comment = typeof obj.comment === 'string' ? obj.comment : undefined;
+        const instructorReply = typeof obj.instructorReply === 'string' ? obj.instructorReply : undefined;
         if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
         const instructorId = payload.role === 'student' ? (payload.instructorId as string) : payload.sub;
-        return await withInstructorContext(instructorId, async () => {
+        const courseId = payload.role === 'student' ? (payload.courseId as string | undefined) : undefined;
+        const run = <T>(fn: () => Promise<T>) => courseId
+            ? withCourseContext(instructorId, courseId, fn)
+            : withInstructorContext(instructorId, fn);
+        return await run(async () => {
             // Only instructor or TA can update request status/comments
             if (payload.role === 'student') {
                 const meId = payload.sub as string;
                 const { rows: me } = await query<{ evaluator: boolean }>(
-                    `SELECT evaluator FROM roster WHERE id=$1 AND owner_id = current_setting('app.current_instructor')::uuid LIMIT 1`,
+                    `SELECT evaluator FROM roster WHERE id=$1 AND owner_id = current_setting('app.current_instructor')::uuid AND course_id = current_setting('app.current_course', true)::uuid LIMIT 1`,
                     [meId]
                 );
                 if (!me.length || !me[0].evaluator) return NextResponse.json({ error: 'forbidden' }, { status: 403 });
@@ -117,12 +140,12 @@ export async function PATCH(req: NextRequest) {
                 instructor_reply=COALESCE($4, instructor_reply), 
                 reply_at=CASE WHEN $4 IS NOT NULL THEN now() ELSE reply_at END,
                 updated_at=now() 
-                WHERE id=$1 AND owner_id = current_setting('app.current_instructor')::uuid 
+                WHERE id=$1 AND owner_id = current_setting('app.current_instructor')::uuid AND course_id = current_setting('app.current_course', true)::uuid
                 RETURNING id, assignment_id as "assignmentId", question_id as "questionId", submission_id as "submissionId", student, comment, status, instructor_reply as "instructorReply", to_char(reply_at,'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as "replyAt", to_char(created_at,'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as "createdAt", to_char(updated_at,'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as "updatedAt"`, [id, status || null, comment != null ? String(comment).slice(0, 2000) : null, instructorReply != null ? String(instructorReply).slice(0, 4000) : null]);
             if (!rows.length) return NextResponse.json({ error: 'Not found' }, { status: 404 });
             return NextResponse.json(rows[0]);
         });
-    } catch (e: any) {
-        return NextResponse.json({ error: e.message || 'failed' }, { status: 500 });
+    } catch (e: unknown) {
+        return NextResponse.json({ error: (e as Error).message || 'failed' }, { status: 500 });
     }
 }

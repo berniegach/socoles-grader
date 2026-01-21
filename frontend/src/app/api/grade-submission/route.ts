@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { initSchema, query, withInstructorContext } from '@/lib/db';
+import { initSchema, query, withCourseContext, withInstructorContext } from '@/lib/db';
 import { parseAuthHeader, verifyJwt } from '@/lib/auth';
 import { GradeSubmissionRequest, GradeSubmissionResponse, PerQuestionGradeResult, QuestionRubric } from '@/lib/types';
 
@@ -24,8 +24,11 @@ async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: numbe
 }
 
 // Core grading function extracted so we can run inline or in a background job
-async function gradeSubmissionCore(instructorId: string, submissionId: string): Promise<GradeSubmissionResponse> {
-    return await withInstructorContext(instructorId, async () => {
+async function gradeSubmissionCore(instructorId: string, submissionId: string, courseId?: string): Promise<GradeSubmissionResponse> {
+    const run = <T>(fn: () => Promise<T>) => courseId
+        ? withCourseContext(instructorId, courseId, fn)
+        : withInstructorContext(instructorId, fn);
+    return await run(async () => {
         const subRes = await query<{ id: string; student: string; date: string; grade: number | null; status: string; assignmentId: string }>(
             `SELECT s.id, s.student, s.date, s.grade::float8 as grade, s.status, s.assignment_id as "assignmentId"
              FROM submissions s WHERE s.id=$1 AND s.owner_id = current_setting('app.current_instructor')::uuid LIMIT 1`, [submissionId]
@@ -227,6 +230,7 @@ export async function POST(req: NextRequest) {
         const { submissionId, async: asyncFlag } = body || {};
         if (!submissionId) return NextResponse.json({ error: 'submissionId required' }, { status: 400 });
         const instructorId = payload.role === 'student' ? (payload.instructorId as string) : payload.sub;
+        const courseId = payload.role === 'student' ? (payload.courseId as string | undefined) : undefined;
         if (asyncFlag) {
             const jobId = newJobId();
             jobs[jobId] = { id: jobId, status: 'queued' };
@@ -234,7 +238,7 @@ export async function POST(req: NextRequest) {
             (async () => {
                 jobs[jobId].status = 'running';
                 try {
-                    const result = await gradeSubmissionCore(instructorId, submissionId);
+                    const result = await gradeSubmissionCore(instructorId, submissionId, courseId);
                     jobs[jobId].result = result;
                     jobs[jobId].status = 'succeeded';
                 } catch (e: unknown) {
@@ -245,7 +249,7 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ jobId }, { status: 202 });
         }
         // Synchronous grading (legacy)
-        const result = await gradeSubmissionCore(instructorId, submissionId);
+        const result = await gradeSubmissionCore(instructorId, submissionId, courseId);
         return NextResponse.json(result);
     } catch (e: unknown) {
         return NextResponse.json({ error: e instanceof Error ? e.message : 'failed' }, { status: 500 });

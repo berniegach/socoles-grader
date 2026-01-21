@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { initSchema, query, withInstructorContext } from '@/lib/db';
+import { initSchema, query, withCourseContext, withInstructorContext } from '@/lib/db';
 import { parseAuthHeader, verifyJwt } from '@/lib/auth';
 import type { RosterEntry, NewRosterEntry } from '@/lib/types';
 
@@ -14,14 +14,18 @@ export async function GET(req: Request) {
         const payload = verifyJwt(token);
         if (!payload) return NextResponse.json({ error: 'invalid token' }, { status: 401 });
         const instructorId = payload.role === 'student' ? (payload.instructorId as string) : payload.sub;
+        const courseId = payload.role === 'student' ? (payload.courseId as string | undefined) : undefined;
+        const run = <T>(fn: () => Promise<T>) => courseId
+            ? withCourseContext(instructorId, courseId, fn)
+            : withInstructorContext(instructorId, fn);
         if (payload.role === 'student') {
             // Only allow Teaching Assistants to list roster
             const meId = payload.sub; // roster id
-            const { rows: me } = await withInstructorContext(instructorId, () => query<{ evaluator: boolean }>(`SELECT evaluator FROM roster WHERE id=$1 AND owner_id = current_setting('app.current_instructor')::uuid LIMIT 1`, [meId]));
+            const { rows: me } = await run(() => query<{ evaluator: boolean }>(`SELECT evaluator FROM roster WHERE id=$1 AND owner_id = current_setting('app.current_instructor')::uuid LIMIT 1`, [meId]));
             if (!me.length || !me[0].evaluator) return NextResponse.json({ error: 'forbidden' }, { status: 403 });
         }
-        const { rows } = await withInstructorContext(instructorId, () => query<RosterEntry>(
-            `SELECT id, name, email, status, evaluator FROM roster WHERE owner_id = current_setting('app.current_instructor')::uuid ORDER BY created_at DESC LIMIT 1000`
+        const { rows } = await run(() => query<RosterEntry>(
+            `SELECT id, name, email, status, evaluator FROM roster WHERE owner_id = current_setting('app.current_instructor')::uuid AND course_id = current_setting('app.current_course', true)::uuid ORDER BY created_at DESC LIMIT 1000`
         ));
         return NextResponse.json(rows);
     } catch (e) {
@@ -45,7 +49,11 @@ export async function POST(req: Request) {
             // verify TA privilege for this instructor
             const meId = payload.sub as string;
             const instructorId = payload.instructorId as string;
-            const { rows: me } = await withInstructorContext(instructorId, () => query<{ evaluator: boolean }>(
+            const courseId = payload.courseId as string | undefined;
+            const run = <T>(fn: () => Promise<T>) => courseId
+                ? withCourseContext(instructorId, courseId, fn)
+                : withInstructorContext(instructorId, fn);
+            const { rows: me } = await run(() => query<{ evaluator: boolean }>(
                 `SELECT evaluator FROM roster WHERE id=$1 AND owner_id = current_setting('app.current_instructor')::uuid LIMIT 1`,
                 [meId]
             ));
@@ -55,21 +63,31 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: 'forbidden' }, { status: 403 });
         }
 
-        const body: NewRosterEntry | { entries: NewRosterEntry[] } = await req.json();
-        const entries = Array.isArray((body as any).entries) ? (body as any).entries as NewRosterEntry[] : [body as NewRosterEntry];
+        const body = await req.json() as unknown;
+        const entries = (() => {
+            if (typeof body === 'object' && body && 'entries' in body) {
+                const maybeEntries = (body as { entries?: unknown }).entries;
+                if (Array.isArray(maybeEntries)) return maybeEntries as NewRosterEntry[];
+            }
+            return [body as NewRosterEntry];
+        })();
         if (!entries.length) return NextResponse.json({ error: 'no entries' }, { status: 400 });
 
         const inserted: RosterEntry[] = [];
-        await withInstructorContext(contextInstructorId!, async () => {
+        const courseId = payload.role === 'student' ? (payload.courseId as string | undefined) : undefined;
+        const run = <T>(fn: () => Promise<T>) => courseId
+            ? withCourseContext(contextInstructorId!, courseId, fn)
+            : withInstructorContext(contextInstructorId!, fn);
+        await run(async () => {
             for (const e of entries) {
                 const name = (e.name || '').trim();
-                const email = (e.email || '').trim();
+                const email = (e.email || '').trim().toLowerCase();
                 if (!name || !email) continue;
                 const status = 'Pending';
                 const { rows } = await query<RosterEntry>(
-                    `INSERT INTO roster (name, email, status, owner_id)
-           VALUES ($1,$2,$3,current_setting('app.current_instructor')::uuid)
-           ON CONFLICT (owner_id, email) DO UPDATE SET name=EXCLUDED.name, status=EXCLUDED.status
+                    `INSERT INTO roster (name, email, status, owner_id, course_id)
+           VALUES ($1,$2,$3,current_setting('app.current_instructor')::uuid, current_setting('app.current_course', true)::uuid)
+           ON CONFLICT (owner_id, course_id, lower(email)) DO UPDATE SET name=EXCLUDED.name, status=EXCLUDED.status
            RETURNING id, name, email, status, evaluator`,
                     [name, email, status]
                 );
@@ -98,7 +116,7 @@ export async function DELETE(req: Request) {
         if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
 
         // Soft delete: mark status Removed so existing student tokens can be invalidated by membership checks
-        const { rows: removedRows } = await withInstructorContext(payload.sub, () => query<{ id: string }>(`UPDATE roster SET status='Removed' WHERE id=$1 AND owner_id = current_setting('app.current_instructor')::uuid RETURNING id`, [id]));
+        const { rows: removedRows } = await withInstructorContext(payload.sub, () => query<{ id: string }>(`UPDATE roster SET status='Removed' WHERE id=$1 AND owner_id = current_setting('app.current_instructor')::uuid AND course_id = current_setting('app.current_course', true)::uuid RETURNING id`, [id]));
         if (!removedRows.length) return NextResponse.json({ error: 'Not found' }, { status: 404 });
         return NextResponse.json({ ok: true, status: 'Removed' });
     } catch (e) {
@@ -127,7 +145,7 @@ export async function PATCH(req: Request) {
                              name=COALESCE($2, name),
                              email=COALESCE($3, email),
                              evaluator=COALESCE($4, evaluator)
-                         WHERE id=$1 AND owner_id = current_setting('app.current_instructor')::uuid
+                         WHERE id=$1 AND owner_id = current_setting('app.current_instructor')::uuid AND course_id = current_setting('app.current_course', true)::uuid
                          RETURNING id, name, email, status, evaluator`,
             [id, name ?? null, email ?? null, typeof evaluator === 'boolean' ? evaluator : null]
         ));

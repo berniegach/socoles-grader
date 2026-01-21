@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
-import { Box, Card, CardHeader, CardContent, CardActions, Typography, Button, Chip, Tabs, Tab, Divider, Collapse, CircularProgress } from '@mui/material';
+import { Box, Card, CardHeader, CardContent, CardActions, Typography, Button, Chip, Tabs, Tab, Divider, CircularProgress } from '@mui/material';
 import { formatDateTimeDDMMYYYYHHmm } from '@/lib/format';
 import DifficultyChip from '@/components/DifficultyChip';
 import SqlEditor from '@/components/SqlEditor';
@@ -115,7 +115,7 @@ export default function StudentAssignmentPlayer({ assignmentId, onClose, onSubmi
     const [qsIdByQuestion, setQsIdByQuestion] = useState<Record<string, string>>({});
     // per-question history cache
     const [historyMap, setHistoryMap] = useState<Record<string, { loading: boolean; attempts: QuestionSubmissionAttempt[]; error?: string }>>({});
-    const [historyOpen, setHistoryOpen] = useState(false);
+    const [attemptTab, setAttemptTab] = useState(0); // index into attempts array (sorted by attempt)
     const [showHint, setShowHint] = useState(false);
 
     const attemptsAllowed = (assignment as any)?.attemptsAllowed ?? 3;
@@ -141,7 +141,7 @@ export default function StudentAssignmentPlayer({ assignmentId, onClose, onSubmi
             setAttemptMap({});
             setQsIdByQuestion({});
             setHistoryMap({});
-            setHistoryOpen(false);
+            setAttemptTab(0);
             restoredRef.current = false; // allow initial restoration on this load
             // Cleanup any legacy local drafts for this assignment to avoid stale prefill
             cleanupLegacyDrafts();
@@ -288,8 +288,8 @@ export default function StudentAssignmentPlayer({ assignmentId, onClose, onSubmi
         } else {
             setSql(''); setGrade(null); setFeedback([]); setRubric({ syntax: 0, semantics: 0, results: 0 });
         }
-        // Close history when switching questions
-        setHistoryOpen(false);
+        // Reset attempt selection when switching questions
+        setAttemptTab(0);
         setShowHint(false);
     }, [currentQuestion?.id, questionDrafts]);
 
@@ -335,10 +335,43 @@ export default function StudentAssignmentPlayer({ assignmentId, onClose, onSubmi
             if (!res.ok) throw new Error('Failed to load attempt history');
             const attempts = await res.json();
             setHistoryMap(m => ({ ...m, [questionId]: { loading: false, attempts } }));
+            if (Array.isArray(attempts) && attempts.length) {
+                setAttemptTab(attempts.length - 1);
+            } else {
+                setAttemptTab(0);
+            }
         } catch (e: any) {
             setHistoryMap(m => ({ ...m, [questionId]: { loading: false, attempts: [], error: e?.message || 'Failed' } }));
+            setAttemptTab(0);
         }
     }
+
+    // Load attempts automatically when the active question changes (tabs UI)
+    useEffect(() => {
+        const qid = currentQuestion?.id;
+        if (!qid || previewMode || !user?.token) return;
+        const qsId = qsIdByQuestion[qid];
+        if (!qsId) return;
+        if (historyMap[qid]?.attempts?.length) {
+            setAttemptTab(Math.max(0, historyMap[qid].attempts.length - 1));
+            return;
+        }
+        void loadHistoryFor(qid);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [currentQuestion?.id, qsIdByQuestion, user?.token, previewMode]);
+
+    const { attemptsSorted, selectedAttempt, attemptsLoading, attemptsError } = useMemo(() => {
+        const qid = currentQuestion?.id || '';
+        const state = historyMap[qid];
+        const attempts = state?.attempts ? [...state.attempts].sort((a, b) => a.attempt - b.attempt) : [];
+        const idx = Math.min(Math.max(0, attemptTab), Math.max(0, attempts.length - 1));
+        return {
+            attemptsSorted: attempts,
+            selectedAttempt: attempts[idx] || null,
+            attemptsLoading: !!state?.loading,
+            attemptsError: state?.error,
+        };
+    }, [historyMap, currentQuestion?.id, attemptTab]);
 
     async function runGrade() {
         if (!currentQuestion || isLocked) return;
@@ -458,8 +491,8 @@ export default function StudentAssignmentPlayer({ assignmentId, onClose, onSubmi
             }
             if (!previewMode) {
                 await persistQuestionSubmission({ question: currentQuestion, sqlText: sql, gradeVal: gVal, feedbackVals: fbVal, rubricVal: rbVal as Rubric, status: 'Auto-graded', incrementAttempt: succeeded });
-                // If history pane is open, refresh it
-                if (historyOpen) await loadHistoryFor(currentQuestion.id);
+                // Refresh attempt history after saving a graded attempt
+                if (succeeded) await loadHistoryFor(currentQuestion.id);
             }
         } finally { setGrading(false); }
     }
@@ -699,53 +732,58 @@ export default function StudentAssignmentPlayer({ assignmentId, onClose, onSubmi
                                 <FeedbackList feedback={feedback} emptyText='No feedback yet.' />
                             </Box>
                             <Divider sx={{ my: 1.5 }} />
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                <Button size='small' variant='text' onClick={async () => {
-                                    const qid = currentQuestion?.id;
-                                    if (!qid) return;
-                                    const opened = !historyOpen;
-                                    setHistoryOpen(opened);
-                                    if (opened && !historyMap[qid]?.attempts?.length) {
-                                        await loadHistoryFor(qid);
-                                    }
-                                }}>Attempt history</Button>
-                                {historyOpen && (historyMap[currentQuestion?.id || '']?.loading ? <Typography variant='caption' color='text.secondary' sx={{ display: 'inline-flex', alignItems: 'center', gap: .75 }}><CircularProgress size={12} /> Loading…</Typography> : null)}
-                                {historyOpen && historyMap[currentQuestion?.id || '']?.error && <Typography variant='caption' color='error'>{historyMap[currentQuestion?.id || '']?.error}</Typography>}
-                            </Box>
-                            <Collapse in={historyOpen} unmountOnExit>
-                                <Box sx={{ mt: 1.25, display: 'grid', gap: 1 }}>
-                                    {(() => {
-                                        const qid = currentQuestion?.id || '';
-                                        const attempts = historyMap[qid]?.attempts || [];
-                                        if (!attempts.length && !historyMap[qid]?.loading) return <Typography variant='caption' color='text.secondary'>No attempts yet.</Typography>;
-                                        return attempts.map((a) => (
-                                            <Box key={a.id} sx={{ p: 1, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
-                                                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: .5 }}>
-                                                    <Typography variant='subtitle2'>Attempt {a.attempt}</Typography>
-                                                    <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-                                                        <Chip size='small' label={`Grade: ${typeof a.grade === 'number' ? a.grade.toFixed(2) : '—'}`} />
-                                                        <Typography variant='caption' color='text.secondary'>{a.createdAt ? formatDateTimeDDMMYYYYHHmm(a.createdAt) : ''}</Typography>
-                                                    </Box>
-                                                </Box>
-                                                <Typography variant='caption' color='text.secondary'>SQL</Typography>
-                                                <Box sx={{ mt: .5, p: .75, bgcolor: 'background.default', borderRadius: 1, fontFamily: 'ui-monospace,monospace' }}>
-                                                    <Typography variant='body2' sx={{ whiteSpace: 'pre-wrap' }}>{a.sql || '--'}</Typography>
-                                                </Box>
-                                                <Box sx={{ mt: 1 }}>
-                                                    <Typography variant='caption' color='text.secondary'>Feedback</Typography>
-                                                    {Array.isArray(a.feedback) && a.feedback.length ? (
-                                                        <Box component='ul' sx={{ pl: 2.25, my: .25, listStyle: 'none' }}>
-                                                            {a.feedback.map((f, i) => <li key={i}><Typography variant='body2' sx={{ whiteSpace: 'pre-line' }}>{f}</Typography></li>)}
-                                                        </Box>
-                                                    ) : (
-                                                        <Typography variant='caption' color='text.secondary'>No feedback.</Typography>
-                                                    )}
+                            <Box>
+                                <Typography variant='body2' color='text.secondary' sx={{ mb: 1 }}>Attempts</Typography>
+                                {attemptsLoading && (
+                                    <Typography variant='caption' color='text.secondary' sx={{ display: 'inline-flex', alignItems: 'center', gap: .75 }}>
+                                        <CircularProgress size={12} /> Loading…
+                                    </Typography>
+                                )}
+                                {!attemptsLoading && attemptsError && <Typography variant='caption' color='error'>{attemptsError}</Typography>}
+                                {!attemptsLoading && !attemptsError && !attemptsSorted.length && (
+                                    <Typography variant='caption' color='text.secondary'>No attempts yet.</Typography>
+                                )}
+                                {!attemptsLoading && !attemptsError && attemptsSorted.length > 0 && selectedAttempt && (
+                                    <Box>
+                                        <Tabs
+                                            value={Math.min(attemptTab, attemptsSorted.length - 1)}
+                                            onChange={(_, v) => setAttemptTab(v)}
+                                            variant='scrollable'
+                                            scrollButtons='auto'
+                                            sx={{ mb: 1 }}
+                                        >
+                                            {attemptsSorted.map((a, i) => (
+                                                <Tab key={a.id} label={`Attempt ${a.attempt}`} value={i} />
+                                            ))}
+                                        </Tabs>
+                                        <Box sx={{ p: 1, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
+                                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: .5 }}>
+                                                <Typography variant='subtitle2'>Attempt {selectedAttempt.attempt}</Typography>
+                                                <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                                                    <Chip size='small' label={`Grade: ${typeof selectedAttempt.grade === 'number' ? selectedAttempt.grade.toFixed(2) : '—'}`} />
+                                                    <Typography variant='caption' color='text.secondary'>
+                                                        {selectedAttempt.createdAt ? formatDateTimeDDMMYYYYHHmm(selectedAttempt.createdAt) : ''}
+                                                    </Typography>
                                                 </Box>
                                             </Box>
-                                        ));
-                                    })()}
-                                </Box>
-                            </Collapse>
+                                            <Typography variant='caption' color='text.secondary'>SQL</Typography>
+                                            <Box sx={{ mt: .5, p: .75, bgcolor: 'background.default', borderRadius: 1, fontFamily: 'ui-monospace,monospace' }}>
+                                                <Typography variant='body2' sx={{ whiteSpace: 'pre-wrap' }}>{selectedAttempt.sql || '--'}</Typography>
+                                            </Box>
+                                            <Box sx={{ mt: 1 }}>
+                                                <Typography variant='caption' color='text.secondary'>Feedback</Typography>
+                                                {Array.isArray(selectedAttempt.feedback) && selectedAttempt.feedback.length ? (
+                                                    <Box component='ul' sx={{ pl: 2.25, my: .25, listStyle: 'none' }}>
+                                                        {selectedAttempt.feedback.map((f, i) => <li key={i}><Typography variant='body2' sx={{ whiteSpace: 'pre-line' }}>{f}</Typography></li>)}
+                                                    </Box>
+                                                ) : (
+                                                    <Typography variant='caption' color='text.secondary'>No feedback.</Typography>
+                                                )}
+                                            </Box>
+                                        </Box>
+                                    </Box>
+                                )}
+                            </Box>
                         </CardContent>
                     </Card>
                     <Card variant='outlined'>

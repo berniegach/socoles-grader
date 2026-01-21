@@ -21,16 +21,10 @@ export async function POST(req: NextRequest) {
         const whereOwner = instructorId ? 'AND owner_id=$2' : '';
         const params = instructorId ? [ssoEmail, instructorId] : [ssoEmail];
         const { rows } = await query<any>(
-            `SELECT r.id as "rosterId", r.owner_id as "ownerId", r.name, r.email,
-                    c.course as "courseName"
+            `SELECT r.id as "rosterId", r.owner_id as "ownerId", r.course_id as "courseId", r.name, r.email,
+                    c.name as "courseName"
              FROM roster r
-             LEFT JOIN LATERAL (
-                 SELECT a.course
-                 FROM assignments a
-                 WHERE a.owner_id = r.owner_id
-                 ORDER BY a.created_at DESC
-                 LIMIT 1
-             ) c ON true
+             LEFT JOIN courses c ON c.id = r.course_id
              WHERE lower(r.email)=$1 ${whereOwner} AND r.status='Active'
              ORDER BY r.created_at DESC`,
             params as any[]
@@ -40,6 +34,7 @@ export async function POST(req: NextRequest) {
             const choices = rows.map((r: any) => ({
                 rosterId: r.rosterId,
                 instructorId: r.ownerId,
+                courseId: r.courseId || null,
                 courseName: r.courseName || null
             }));
             return NextResponse.json({ error: 'multiple accounts', choices }, { status: 400 });
@@ -47,7 +42,7 @@ export async function POST(req: NextRequest) {
         const row = rows[0];
         const email = String(row.email || ssoEmail);
         const name = String(row.name || ssoName);
-        const token = signStudentJwt({ rosterId: row.rosterId, instructorId: row.ownerId, email, name }, { expiresInSec: 60 * 60 * 24 * 7 });
+        const token = signStudentJwt({ rosterId: row.rosterId, instructorId: row.ownerId, courseId: row.courseId || undefined, email, name }, { expiresInSec: 60 * 60 * 24 * 7 });
         return NextResponse.json({ token, student: { id: row.rosterId, instructorId: row.ownerId, email, name } });
     } catch (e: any) {
         return NextResponse.json({ error: e?.message || 'failed' }, { status: 500 });

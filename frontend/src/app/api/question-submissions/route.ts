@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { initSchema, query, withInstructorContext } from '@/lib/db';
+import { initSchema, query, withCourseContext, withInstructorContext } from '@/lib/db';
 import { parseAuthHeader, verifyJwt } from '@/lib/auth';
 
 let initialized = false; async function ensureInit() { if (!initialized) { await initSchema(); initialized = true; } }
@@ -19,7 +19,11 @@ export async function GET(req: NextRequest) {
         const historyOf = searchParams.get('historyOf');
         const allStudents = searchParams.get('allStudents');
         const instructorId = payload.role === 'student' ? (payload.instructorId as string) : payload.sub;
-        return await withInstructorContext(instructorId, async () => {
+        const courseId = payload.role === 'student' ? (payload.courseId as string | undefined) : undefined;
+        const run = <T>(fn: () => Promise<T>) => courseId
+            ? withCourseContext(instructorId, courseId, fn)
+            : withInstructorContext(instructorId, fn);
+        return await run(async () => {
             if (historyOf) {
                 const { rows } = await query(`
                     SELECT id,
@@ -88,7 +92,11 @@ export async function POST(req: NextRequest) {
         // Back-compat: treat noAttemptIncrement === false as a signal to increment.
         const shouldIncrement = incrementAttempt === true || noAttemptIncrement === false;
         const instructorId = payload.role === 'student' ? (payload.instructorId as string) : payload.sub;
-        return await withInstructorContext(instructorId, async () => {
+        const courseId = payload.role === 'student' ? (payload.courseId as string | undefined) : undefined;
+        const run = <T>(fn: () => Promise<T>) => courseId
+            ? withCourseContext(instructorId, courseId, fn)
+            : withInstructorContext(instructorId, fn);
+        return await run(async () => {
             const effectiveStudent = payload.role === 'student' ? payload.email : (student || '');
             if (!effectiveStudent) return NextResponse.json({ error: 'student required' }, { status: 400 });
             const { rows } = await query(`INSERT INTO question_submissions (submission_id, assignment_id, question_id, student, sql, grade, status, rubric, feedback, attempt, owner_id)
@@ -122,7 +130,11 @@ export async function PATCH(req: NextRequest) {
         const { id, grade, rubric, feedback, status, incrementAttempt, noAttemptIncrement } = body || {};
         if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
         const instructorId = payload.role === 'student' ? (payload.instructorId as string) : payload.sub;
-        return await withInstructorContext(instructorId, async () => {
+        const courseId = payload.role === 'student' ? (payload.courseId as string | undefined) : undefined;
+        const run = <T>(fn: () => Promise<T>) => courseId
+            ? withCourseContext(instructorId, courseId, fn)
+            : withInstructorContext(instructorId, fn);
+        return await run(async () => {
             const { rows } = await query(`UPDATE question_submissions SET grade=$2, rubric=$3, feedback=$4, status=$5 WHERE id=$1 AND owner_id = current_setting('app.current_instructor')::uuid RETURNING id, submission_id as "submissionId", assignment_id as "assignmentId", question_id as "questionId", student, sql, grade::float8 as grade, status, rubric, feedback, attempt`, [id, grade ?? null, rubric || null, Array.isArray(feedback) ? feedback : [], status || 'Pending']);
             if (!rows.length) return NextResponse.json({ error: 'Not found' }, { status: 404 });
             let qs = rows[0];

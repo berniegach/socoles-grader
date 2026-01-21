@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
         const whereOwner = instructorId ? 'AND owner_id=$2' : '';
         const params = instructorId ? [norm, instructorId] : [norm];
         const { rows } = await query<any>(
-            `SELECT r.id as "rosterId", r.owner_id as "ownerId", r.name, r.email
+            `SELECT r.id as "rosterId", r.owner_id as "ownerId", r.course_id as "courseId", r.name, r.email
        FROM roster r
        WHERE lower(r.email)=$1 ${whereOwner} AND r.status='Active'
        ORDER BY r.created_at DESC`,
@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
         if (!sec.rows.length) return NextResponse.json({ error: 'credentials not set' }, { status: 400 });
         const ok = await bcrypt.compare(String(password), sec.rows[0].password);
         if (!ok) return NextResponse.json({ error: 'invalid credentials' }, { status: 401 });
-        const token = signStudentJwt({ rosterId: row.rosterId, instructorId: row.ownerId, email: row.email, name: row.name }, { expiresInSec: 60 * 60 * 24 * 7 });
+        const token = signStudentJwt({ rosterId: row.rosterId, instructorId: row.ownerId, courseId: row.courseId || undefined, email: row.email, name: row.name }, { expiresInSec: 60 * 60 * 24 * 7 });
         return NextResponse.json({ token, student: { id: row.rosterId, instructorId: row.ownerId, email: row.email, name: row.name } });
     } catch (e: any) {
         return NextResponse.json({ error: e.message || 'failed' }, { status: 500 });

@@ -12,6 +12,10 @@ import {
     TextField,
     Alert,
     Typography,
+    FormControl,
+    InputLabel,
+    Select,
+    MenuItem,
 } from '@mui/material';
 import SaveIcon from '@mui/icons-material/Save';
 import DownloadIcon from '@mui/icons-material/Download';
@@ -40,6 +44,13 @@ type Settings = {
     latePenalty: number;     // % per day
     passThreshold: number;   // % overall
     gradingDefaults: GradingOptionsType;
+};
+
+type Course = {
+    id: string;
+    name: string;
+    enrollmentCode: string;
+    isDefault: boolean;
 };
 
 const DEFAULTS: Settings = {
@@ -115,6 +126,90 @@ export default function InstructorSettings() {
     const [purgeOpen, setPurgeOpen] = useState(false);
     const [purging, setPurging] = useState(false);
     const [confirmText, setConfirmText] = useState('');
+
+    const [courses, setCourses] = useState<Course[]>([]);
+    const [defaultCourseId, setDefaultCourseId] = useState<string>('');
+    const [newCourseName, setNewCourseName] = useState<string>('');
+    const [newEnrollmentCode, setNewEnrollmentCode] = useState<string>('');
+    const [creatingCourse, setCreatingCourse] = useState(false);
+
+    const refreshCourses = useCallback(async () => {
+        try {
+            const res = await authFetch('/api/instructor/courses', { method: 'GET' });
+            if (!res.ok) return;
+            const data = await res.json();
+            const list = (data.courses || []) as Course[];
+            setCourses(list);
+            const def = String(data.defaultCourseId || list.find((c) => c.isDefault)?.id || '');
+            setDefaultCourseId(def);
+        } catch {
+            // ignore
+        }
+    }, [authFetch]);
+
+    const setDefaultCourse = useCallback(async (courseId: string) => {
+        try {
+            const res = await authFetch('/api/instructor/courses', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ courseId })
+            });
+            if (res.ok) {
+                setNote({ type: 'success', msg: 'Default course updated.' });
+                await refreshCourses();
+                // Refresh settings so the course header updates immediately.
+                const sRes = await authFetch('/api/instructor/settings', { method: 'GET' });
+                if (sRes.ok) {
+                    const data = await sRes.json();
+                    setS({
+                        courseName: data.course_name || DEFAULTS.courseName,
+                        enrollmentCode: data.enrollment_code || DEFAULTS.enrollmentCode,
+                        attempts: data.attempts ?? DEFAULTS.attempts,
+                        latePenalty: data.late_penalty ?? DEFAULTS.latePenalty,
+                        passThreshold: data.pass_threshold ?? DEFAULTS.passThreshold,
+                        gradingDefaults: data.grading_defaults || { ...DEFAULT_GRADING_OPTIONS },
+                    });
+                }
+            } else {
+                setNote({ type: 'error', msg: 'Failed to update default course.' });
+            }
+        } catch {
+            setNote({ type: 'error', msg: 'Failed to update default course.' });
+        }
+    }, [authFetch, refreshCourses]);
+
+    const createCourse = useCallback(async () => {
+        const name = newCourseName.trim();
+        if (!name) {
+            setNote({ type: 'error', msg: 'Course name is required.' });
+            return;
+        }
+        setCreatingCourse(true);
+        try {
+            const res = await authFetch('/api/instructor/courses', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, enrollmentCode: newEnrollmentCode.trim(), makeDefault: true })
+            });
+            if (res.ok) {
+                setNewCourseName('');
+                setNewEnrollmentCode('');
+                setNote({ type: 'success', msg: 'Course created (set as default).' });
+                await refreshCourses();
+            } else {
+                const err = await res.json().catch(() => ({}));
+                setNote({ type: 'error', msg: err.error || 'Failed to create course.' });
+            }
+        } catch {
+            setNote({ type: 'error', msg: 'Failed to create course.' });
+        } finally {
+            setCreatingCourse(false);
+        }
+    }, [authFetch, newCourseName, newEnrollmentCode, refreshCourses]);
+
+    useEffect(() => {
+        void refreshCourses();
+    }, [refreshCourses]);
 
     // Save settings to backend
     const save = useCallback(async () => {
@@ -318,6 +413,65 @@ export default function InstructorSettings() {
                                         <Button startIcon={<SaveIcon />} color='secondary' variant='outlined' onClick={saveAccountName} disabled={!accountName.trim()}>Save Name</Button>
                                     )}
                                     <Button startIcon={<SaveIcon />} variant="contained" onClick={save}>Save Course</Button>
+                                </CardActions>
+                            </Card>
+                        </Grid>
+
+                        {/* Courses */}
+                        <Grid size={{ xs: 12, md: 6 }}>
+                            <Card>
+                                <CardHeader title="Courses" subheader="Create and switch between multiple courses." />
+                                <CardContent>
+                                    <Grid container spacing={2}>
+                                        <Grid size={12}>
+                                            <FormControl fullWidth size="small">
+                                                <InputLabel id="default-course-label">Default course</InputLabel>
+                                                <Select
+                                                    labelId="default-course-label"
+                                                    label="Default course"
+                                                    value={defaultCourseId || ''}
+                                                    onChange={(e) => {
+                                                        const next = String(e.target.value || '');
+                                                        setDefaultCourseId(next);
+                                                        if (next) void setDefaultCourse(next);
+                                                    }}
+                                                >
+                                                    {courses.map((c) => (
+                                                        <MenuItem key={c.id} value={c.id}>{c.name}</MenuItem>
+                                                    ))}
+                                                </Select>
+                                            </FormControl>
+                                        </Grid>
+
+                                        <Grid size={12}>
+                                            <Typography variant="subtitle2" color="text.secondary">Add a new course</Typography>
+                                        </Grid>
+                                        <Grid size={{ xs: 12, md: 7 }}>
+                                            <TextField
+                                                label="Course name"
+                                                value={newCourseName}
+                                                onChange={(e) => setNewCourseName(e.target.value)}
+                                                variant="outlined"
+                                                size="small"
+                                                fullWidth
+                                            />
+                                        </Grid>
+                                        <Grid size={{ xs: 12, md: 5 }}>
+                                            <TextField
+                                                label="Enrollment code"
+                                                value={newEnrollmentCode}
+                                                onChange={(e) => setNewEnrollmentCode(e.target.value)}
+                                                variant="outlined"
+                                                size="small"
+                                                fullWidth
+                                            />
+                                        </Grid>
+                                    </Grid>
+                                </CardContent>
+                                <CardActions sx={{ justifyContent: 'flex-end' }}>
+                                    <Button variant="contained" onClick={createCourse} disabled={creatingCourse || !newCourseName.trim()}>
+                                        Add Course
+                                    </Button>
                                 </CardActions>
                             </Card>
                         </Grid>

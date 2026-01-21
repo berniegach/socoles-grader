@@ -1,6 +1,6 @@
 'use client';
-import { useMemo, useState, useEffect, useRef } from 'react';
-import { Box, Drawer, Toolbar, AppBar, Typography, IconButton, List, ListItemButton, ListItemIcon, ListItemText, Avatar, Divider, ListSubheader, Chip } from '@mui/material';
+import { useMemo, useState, useEffect, useRef, useCallback } from 'react';
+import { Box, Drawer, Toolbar, AppBar, Typography, IconButton, List, ListItemButton, ListItemIcon, ListItemText, Avatar, Divider, ListSubheader, Chip, Menu, MenuItem } from '@mui/material';
 import DashboardIcon from '@mui/icons-material/DashboardRounded';
 import MenuBookIcon from '@mui/icons-material/MenuBook';
 import DescriptionIcon from '@mui/icons-material/DescriptionOutlined';
@@ -11,6 +11,8 @@ import SettingsIcon from '@mui/icons-material/SettingsOutlined';
 import RateReviewIcon from '@mui/icons-material/RateReviewOutlined';
 import StorageIcon from '@mui/icons-material/StorageOutlined';
 import LogoutIcon from '@mui/icons-material/Logout';
+import MoreVertIcon from '@mui/icons-material/MoreVert';
+import CheckIcon from '@mui/icons-material/Check';
 
 import StudentArea from '@/features/student/StudentArea';
 import InstructorArea from '@/features/instructor/InstructorArea';
@@ -71,7 +73,7 @@ export default function AppShell() {
 
     const [active, setActive] = useState(combinedItems[0]?.id || (role === 'student' ? 's-dash' : 'i-dash'));
     const [pendingCount, setPendingCount] = useState<number>(0);
-    const pollRef = useRef<any>(null);
+    const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
     // Poll pending review requests count for instructors and TAs
     useEffect(() => {
@@ -95,7 +97,7 @@ export default function AppShell() {
     // Allow children to request navigation via a custom event
     useEffect(() => {
         function onNavigate(e: Event) {
-            const detail = (e as CustomEvent).detail as { id?: string; submissionId?: string; questionId?: string; assignmentId?: string } | undefined;
+            const detail = (e as CustomEvent<{ id?: string; submissionId?: string; questionId?: string; assignmentId?: string }>).detail;
             if (detail?.id) {
                 setActive(detail.id);
                 sessionStorage.setItem('appshell.active', detail.id);
@@ -114,26 +116,76 @@ export default function AppShell() {
 
     // Get course name for app bar (for instructors)
     const [courseName, setCourseName] = useState<string>('');
-    useEffect(() => {
-        (async () => {
-            try {
-                let res;
-                if (role === 'instructor') {
-                    res = await authFetch('/api/instructor/settings', { method: 'GET' });
-                } else {
-                    res = await authFetch('/api/student/course', { method: 'GET' });
-                }
-                if (res.ok) {
-                    const data = await res.json();
-                    setCourseName(data.course_name || '');
-                } else {
-                    setCourseName('');
-                }
-            } catch {
+    const [courseScopeNonce, setCourseScopeNonce] = useState(0);
+
+    const refreshCourseName = useCallback(async () => {
+        try {
+            let res;
+            if (role === 'instructor') {
+                res = await authFetch('/api/instructor/settings', { method: 'GET' });
+            } else {
+                res = await authFetch('/api/student/course', { method: 'GET' });
+            }
+            if (res.ok) {
+                const data = await res.json();
+                setCourseName(data.course_name || '');
+            } else {
                 setCourseName('');
             }
-        })();
+        } catch {
+            setCourseName('');
+        }
     }, [role, authFetch]);
+    useEffect(() => {
+        void refreshCourseName();
+    }, [refreshCourseName]);
+
+    const [overflowEl, setOverflowEl] = useState<HTMLElement | null>(null);
+    const overflowOpen = Boolean(overflowEl);
+    const [courseMenuEl, setCourseMenuEl] = useState<HTMLElement | null>(null);
+    const [courseMenuOpen, setCourseMenuOpen] = useState(false);
+    const [courses, setCourses] = useState<Array<{ id: string; name: string }>>([]);
+    const [defaultCourseId, setDefaultCourseId] = useState<string>('');
+
+    const loadCourses = async () => {
+        if (role !== 'instructor') return;
+        try {
+            const res = await authFetch('/api/instructor/courses', { method: 'GET' });
+            if (!res.ok) return;
+            const data = (await res.json()) as { courses?: Array<{ id: unknown; name?: unknown }>; defaultCourseId?: unknown };
+            const list = Array.isArray(data?.courses) ? data.courses : [];
+            setCourses(list.map((c) => ({ id: String(c.id), name: String((c as { name?: unknown }).name ?? '') })));
+            setDefaultCourseId(data?.defaultCourseId ? String(data.defaultCourseId) : '');
+        } catch {
+            // ignore
+        }
+    };
+
+    const openChangeCourse = async () => {
+        await loadCourses();
+        setCourseMenuEl(overflowEl);
+        setCourseMenuOpen(true);
+        setOverflowEl(null);
+    };
+
+    const changeActiveCourse = async (courseId: string) => {
+        if (role !== 'instructor') return;
+        try {
+            const res = await authFetch('/api/instructor/courses', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ courseId }),
+            });
+            if (!res.ok) return;
+            setDefaultCourseId(courseId);
+            setCourseMenuOpen(false);
+            await refreshCourseName();
+            // Remount the active content tree so each view refetches under the new course scope.
+            setCourseScopeNonce((n) => n + 1);
+        } catch {
+            // ignore
+        }
+    };
 
     const handleSignOut = async () => {
         try {
@@ -162,6 +214,43 @@ export default function AppShell() {
                     <IconButton color="inherit" onClick={handleSignOut} title="Sign out" sx={{ bgcolor: 'rgba(0,0,0,0.15)', '&:hover': { bgcolor: 'rgba(0,0,0,0.25)' } }}>
                         <LogoutIcon />
                     </IconButton>
+                    <IconButton
+                        color="inherit"
+                        onClick={(e) => setOverflowEl(e.currentTarget)}
+                        title="More"
+                        sx={{ bgcolor: 'rgba(0,0,0,0.15)', '&:hover': { bgcolor: 'rgba(0,0,0,0.25)' } }}
+                    >
+                        <MoreVertIcon />
+                    </IconButton>
+                    <Menu
+                        anchorEl={overflowEl}
+                        open={overflowOpen}
+                        onClose={() => setOverflowEl(null)}
+                        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+                        transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+                    >
+                        {role === 'instructor' && (
+                            <MenuItem onClick={() => void openChangeCourse()}>
+                                Change active course
+                            </MenuItem>
+                        )}
+                    </Menu>
+                    <Menu
+                        anchorEl={courseMenuEl}
+                        open={courseMenuOpen}
+                        onClose={() => { setCourseMenuOpen(false); setCourseMenuEl(null); }}
+                        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+                        transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+                    >
+                        {courses.map((c) => (
+                            <MenuItem key={c.id} onClick={() => void changeActiveCourse(c.id)}>
+                                <ListItemIcon sx={{ minWidth: 30 }}>
+                                    {c.id === defaultCourseId ? <CheckIcon fontSize="small" /> : null}
+                                </ListItemIcon>
+                                {c.name || 'Untitled course'}
+                            </MenuItem>
+                        ))}
+                    </Menu>
                 </Toolbar>
             </AppBar>
 
@@ -186,7 +275,7 @@ export default function AppShell() {
                                 key={it.id}
                                 aria-current={isActive ? 'page' : undefined}
                                 onClick={() => { setActive(it.id); sessionStorage.setItem('appshell.active', it.id); }}
-                                sx={(theme) => ({
+                                sx={{
                                     position: 'relative',
                                     borderRadius: 1,
                                     mx: 1,
@@ -214,7 +303,7 @@ export default function AppShell() {
                                         borderRadius: 2,
                                         background: 'linear-gradient(180deg,#ff66c4,#ffde59)'
                                     } : undefined
-                                })}
+                                }}
                             >
                                 <ListItemIcon sx={{ minWidth: 40, color: isActive ? 'secondary.main' : 'text.secondary' }}>
                                     <it.icon fontSize='small' />
@@ -288,7 +377,7 @@ export default function AppShell() {
 
             <Box component="main" sx={{ flexGrow: 1 }}>
                 <Toolbar />
-                <Box sx={{ maxWidth: 1040, mx: 'auto', px: 3, pt: 2, pb: 5 }}>
+                <Box key={`course-scope:${courseScopeNonce}`} sx={{ maxWidth: 1040, mx: 'auto', px: 3, pt: 2, pb: 5 }}>
                     {role === 'student'
                         ? (user?.evaluator && (active === 'i-reviews' || active === 'i-class' || active === 'i-submissions')
                             ? (active === 'i-reviews' ? <InstructorReviewRequests /> : active === 'i-class' ? <ClassRoster /> : <InstructorArea active="i-submissions" />)

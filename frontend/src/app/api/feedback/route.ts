@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { initSchema, withInstructorContext, query } from '@/lib/db';
+import { initSchema, withCourseContext, withInstructorContext, query } from '@/lib/db';
 import { computeAssignmentImprovement, computeSurveyEligibility } from '@/lib/feedbackStats';
 import { parseAuthHeader, verifyJwt } from '@/lib/auth';
 
@@ -19,6 +19,10 @@ export async function GET(req: Request) {
         const aggregate = url.searchParams.get('aggregate');
         const instructorId = payload.role === 'student' ? (payload.instructorId as string) : payload.sub;
         const isStudent = payload.role === 'student';
+        const courseId = isStudent ? (payload.courseId as string | undefined) : undefined;
+        const run = <T>(fn: () => Promise<T>) => courseId
+            ? withCourseContext(instructorId, courseId, fn)
+            : withInstructorContext(instructorId, fn);
         // Aggregate analytics (instructors only) over all (or specific assignment if provided)
         if (!isStudent && aggregate) {
             // Build optional assignment filter
@@ -79,19 +83,19 @@ export async function GET(req: Request) {
             });
         }
         if (assignmentId) {
-            const { rows } = await withInstructorContext(instructorId, () => query<any>(`SELECT assignment_id as "assignmentId", student, helped_fix as "helpedFix", improved_understanding as "improvedUnderstanding", comment, first_score as "firstScore", final_score as "finalScore", attempt_count as "attemptCount", improvement FROM assignment_feedback_survey WHERE assignment_id=$1 AND owner_id = current_setting('app.current_instructor')::uuid${isStudent ? ' AND student=$2' : ''} LIMIT 1`, isStudent ? [assignmentId, payload.name] : [assignmentId]));
+            const { rows } = await run(() => query<any>(`SELECT assignment_id as "assignmentId", student, helped_fix as "helpedFix", improved_understanding as "improvedUnderstanding", comment, first_score as "firstScore", final_score as "finalScore", attempt_count as "attemptCount", improvement FROM assignment_feedback_survey WHERE assignment_id=$1 AND owner_id = current_setting('app.current_instructor')::uuid${isStudent ? ' AND student=$2' : ''} LIMIT 1`, isStudent ? [assignmentId, payload.name] : [assignmentId]));
             if (rows[0]) return NextResponse.json(rows[0]);
             // Preview stats for student before submitting the survey
             if (isStudent) {
-                const eligible = await computeSurveyEligibility({ instructorId, assignmentId, studentName: payload.name, studentEmail: payload.email });
+                const eligible = await computeSurveyEligibility({ instructorId, courseId, assignmentId, studentName: payload.name, studentEmail: payload.email });
                 if (eligible.perfectOnFirstTry) return NextResponse.json({ notEligible: true });
-                const stats = await computeAssignmentImprovement({ instructorId, assignmentId, studentName: payload.name, studentEmail: payload.email });
+                const stats = await computeAssignmentImprovement({ instructorId, courseId, assignmentId, studentName: payload.name, studentEmail: payload.email });
                 return NextResponse.json(stats);
             }
             return NextResponse.json(null);
         }
         if (isStudent) {
-            const { rows } = await withInstructorContext(instructorId, () => query<any>(`SELECT assignment_id as "assignmentId" FROM assignment_feedback_survey WHERE student=$1 AND owner_id = current_setting('app.current_instructor')::uuid`, [payload.name]));
+            const { rows } = await run(() => query<any>(`SELECT assignment_id as "assignmentId" FROM assignment_feedback_survey WHERE student=$1 AND owner_id = current_setting('app.current_instructor')::uuid`, [payload.name]));
             return NextResponse.json(rows);
         }
         // Instructor: list recent
@@ -118,10 +122,15 @@ export async function POST(req: Request) {
 
         // Compute improvement metrics using shared utility
         const instructorId = payload.instructorId as string;
-        const stats = await computeAssignmentImprovement({ instructorId, assignmentId, studentName: payload.name, studentEmail: payload.email });
+        const courseId = payload.courseId as string | undefined;
+        const stats = await computeAssignmentImprovement({ instructorId, courseId, assignmentId, studentName: payload.name, studentEmail: payload.email });
         const { firstScore, finalScore, attemptCount, improvement } = stats;
 
-        const { rows } = await withInstructorContext(instructorId, () => query<any>(`INSERT INTO assignment_feedback_survey (assignment_id, student, owner_id, helped_fix, improved_understanding, comment, first_score, final_score, attempt_count, improvement)
+        const run = <T>(fn: () => Promise<T>) => courseId
+            ? withCourseContext(instructorId, courseId, fn)
+            : withInstructorContext(instructorId, fn);
+
+        const { rows } = await run(() => query<any>(`INSERT INTO assignment_feedback_survey (assignment_id, student, owner_id, helped_fix, improved_understanding, comment, first_score, final_score, attempt_count, improvement)
             VALUES ($1,$2,current_setting('app.current_instructor')::uuid,$3,$4,$5,$6,$7,$8,$9)
             ON CONFLICT (assignment_id, student, owner_id)
             DO UPDATE SET helped_fix=EXCLUDED.helped_fix, improved_understanding=EXCLUDED.improved_understanding, comment=EXCLUDED.comment, first_score=EXCLUDED.first_score, final_score=EXCLUDED.final_score, attempt_count=EXCLUDED.attempt_count, improvement=EXCLUDED.improvement

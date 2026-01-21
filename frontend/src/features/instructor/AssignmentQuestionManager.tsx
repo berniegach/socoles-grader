@@ -68,18 +68,6 @@ export default function AssignmentQuestionManager() {
 
     // New assignment form
     const [title, setTitle] = useState('');
-    const [course, setCourse] = useState('DB201 — Intermediate SQL');
-    useEffect(() => {
-        (async () => {
-            try {
-                const res = await authFetch('/api/instructor/settings', { method: 'GET' });
-                if (res.ok) {
-                    const data = await res.json();
-                    if (data.course_name) setCourse(data.course_name);
-                }
-            } catch { /* ignore */ }
-        })();
-    }, [authFetch]);
     const [difficulty, setDifficulty] = useState('Beginner');
     const [points, setPoints] = useState(0);
     const [due, setDue] = useState('');
@@ -112,7 +100,6 @@ export default function AssignmentQuestionManager() {
         setCreating(true); setError(null);
         const payload: NewAssignmentPayload = {
             title: title.trim(),
-            course: course.trim() || 'Course',
             difficulty: difficulty || 'Beginner',
             points: Number(points) || 0,
             due: due || '',
@@ -138,18 +125,6 @@ export default function AssignmentQuestionManager() {
     }
     function startCreate() {
         setTitle('');
-        // Always fetch latest course name from backend
-        (async () => {
-            try {
-                const res = await authFetch('/api/instructor/settings', { method: 'GET' });
-                if (res.ok) {
-                    const data = await res.json();
-                    setCourse((data.course_name || 'DB201 — Intermediate SQL').toString().trim());
-                } else {
-                    setCourse('DB201 — Intermediate SQL');
-                }
-            } catch { setCourse('DB201 — Intermediate SQL'); }
-        })();
         setDifficulty('Beginner');
         setPoints(0);
         setDue('');
@@ -163,7 +138,6 @@ export default function AssignmentQuestionManager() {
     async function startEdit(a: Assignment) {
         setEditingId(a.id);
         setTitle(a.title || '');
-        setCourse(a.course || '');
         setDifficulty(a.difficulty || 'Beginner');
         setPoints(a.points || 0);
         setDue(a.due || '');
@@ -188,7 +162,6 @@ export default function AssignmentQuestionManager() {
                     due: due || '',
                     difficulty: difficulty || 'Beginner',
                     tags: tags.split(',').map(t => t.trim()).filter(Boolean),
-                    course: course || 'Course',
                     attemptsAllowed: Math.max(1, Math.floor(Number(attemptsAllowed) || 1)),
                     published
                 })
@@ -316,7 +289,6 @@ export default function AssignmentQuestionManager() {
                     <Box sx={{ p: { xs: 1.5, md: 2 }, borderRadius: 2, bgcolor: 'transparent' }}>
                         <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: { sm: 'repeat(2,1fr)', xs: '1fr' } }}>
                             <TextField label='Title' value={title} onChange={e => setTitle(e.target.value)} variant='outlined' size='small' fullWidth required />
-                            <TextField label='Course' value={course} onChange={e => setCourse(e.target.value)} variant='outlined' size='small' fullWidth />
                             <TextField label='Difficulty' value={difficulty} onChange={e => setDifficulty(e.target.value)} select size='small'>
                                 {['Beginner', 'Intermediate', 'Advanced'].map(d => <MenuItem key={d} value={d}>{d}</MenuItem>)}
                             </TextField>
@@ -345,7 +317,7 @@ export default function AssignmentQuestionManager() {
                         <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', mb: 2, flexWrap: 'wrap' }}>
                             <TextField
                                 label='Search assignments'
-                                placeholder='Title, course, tag'
+                                placeholder='Title, tag'
                                 value={filter}
                                 onChange={e => setFilter(e.target.value)}
                                 variant='outlined'
